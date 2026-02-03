@@ -25,6 +25,7 @@
 		}
 
 		* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+		[x-cloak] { display: none !important; }
 
 		body {
 			margin: 0;
@@ -39,7 +40,7 @@
 
 		/* --- Header & Navigation --- */
 		header {
-			background: rgba(28, 28, 30, 0.85); /* Translucent dark */
+			background: rgba(28, 28, 30, 0.85);
 			padding: 15px 15px 5px 15px;
 			position: fixed;
 			top: 0; left: 0; right: 0;
@@ -108,7 +109,7 @@
 			padding: 16px;
 			margin-bottom: 12px;
 			display: flex;
-			flex-direction: column; /* Default stack */
+			flex-direction: column;
 		}
 
 		.selector-card {
@@ -154,7 +155,7 @@
 
 		.value.placeholder { color: var(--text-secondary); opacity: 0.5; }
 
-		/* --- Shopping List Styles (Redesigned) --- */
+		/* --- Shopping List Styles --- */
 
 		.store-header {
 			font-size: 22px;
@@ -165,12 +166,11 @@
 			color: var(--primary);
 		}
 
-		/* Store List Row */
 		.store-row-card {
 			background: var(--card-bg);
 			border-radius: 10px;
 			padding: 18px 16px;
-			margin-bottom: 1px; /* Divider look */
+			margin-bottom: 1px;
 			display: flex;
 			flex-direction: row;
 			justify-content: space-between;
@@ -198,7 +198,6 @@
 			color: var(--text-secondary);
 		}
 
-		/* Shopping Item Row */
 		.item-row {
 			background: var(--card-bg);
 			border-radius: 10px;
@@ -407,14 +406,11 @@
 		}
 		.delete-icon:hover { color: var(--danger); }
 
-		/* Mark items already added to the shopping list in the item picker */
 		.list-item.present {
 			background: rgba(123, 189, 255, 0.12);
 			border-left: 2px solid rgba(10,132,255,0.45);
 		}
-		.list-item.present .delete-icon { color: var(--text-secondary); }
 
-		/* Selected row (active store/item) */
 		.list-item.selected {
 			background: rgba(50,215,75,0.06);
 			border-left: 3px solid var(--success);
@@ -427,722 +423,596 @@
 			display: inline-block;
 			vertical-align: middle;
 		}
-
 	</style>
-</head>
-<body>
 
+	<script defer src="./alpine.min.js"></script>
+</head>
+
+<body x-data="todoBuyApp()" x-init="init()" x-on:keydown.escape.window="closeOverlay()" x-cloak>
 	<header>
-		<h1>Todo: Buy</h1>
+		<h1
+			x-on:mousedown.prevent="startHold()"
+			x-on:touchstart.passive=""
+			x-on:touchstart.prevent="startHold($event)"
+			x-on:mouseup="clearHold()"
+			x-on:mouseleave="clearHold()"
+			x-on:touchend="clearHold()"
+			x-on:touchcancel="clearHold()"
+		>Todo: Buy</h1>
 		<div class="mode-switch">
-			<button class="mode-btn active" id="btn-mode-add" onclick="app.setMode('add')">Add Item</button>
-			<button class="mode-btn" id="btn-mode-shop" onclick="app.setMode('shop')">Shopping</button>
+			<button class="mode-btn" id="btn-mode-add" :class="{ active: state.mode === 'add' }" x-on:click="setMode('add')">Add Item</button>
+			<button class="mode-btn" id="btn-mode-shop" :class="{ active: state.mode === 'shop' }" x-on:click="setMode('shop')">Shopping</button>
 		</div>
 	</header>
 
 	<main id="app-content">
-
-		<div id="view-add" class="">
-			<div id="card-store" class="card selector-card" onclick="app.openOverlay('store')">
+		<!-- Add Mode -->
+		<div id="view-add" x-show="state.mode === 'add'">
+			<div id="card-store" class="card selector-card" x-on:click="openOverlay('store')">
 				<div class="label">Store</div>
-				<div class="value" id="disp-store">Select Store...</div>
+				<div class="value" id="disp-store" :class="{ placeholder: !draft.store }" x-text="draft.store || 'Select Store...'" ></div>
 			</div>
 
-			<div id="card-item" class="card selector-card" onclick="app.openOverlay('item')">
+			<div id="card-item" class="card selector-card" :class="{ disabled: !draft.store }" x-on:click="openOverlay('item')">
 				<div class="label">Item</div>
-				<div class="value" id="disp-item">Select Item...</div>
+				<div class="value" id="disp-item" :class="{ placeholder: !draft.item }" x-text="draft.item || 'Select Item...'" ></div>
 			</div>
 
-			<div id="card-quantity" class="card selector-card" onclick="app.openOverlay('quantity')">
+			<div id="card-quantity" class="card selector-card" :class="{ disabled: !draft.store || !draft.item }" x-on:click="openOverlay('quantity')">
 				<div class="label">Quantity</div>
-				<div class="value" id="disp-qty">Tap to enter quantity...</div>
+				<div class="value" id="disp-qty" :class="{ placeholder: draft.qty === null || draft.qty === '' }" x-text="(draft.qty === null || draft.qty === '') ? 'Tap to enter quantity...' : draft.qty"></div>
 			</div>
 
-			<div id="card-notes" class="card selector-card" onclick="app.openOverlay('notes')">
+			<div id="card-notes" class="card selector-card" :class="{ disabled: !draft.store || !draft.item }" x-on:click="openOverlay('notes')">
 				<div class="label">Notes</div>
-				<div class="value placeholder" id="disp-notes">Tap to add notes...</div>
+				<div class="value" id="disp-notes" :class="{ placeholder: !draft.notes }" x-text="draft.notes ? draft.notes : 'Tap to add notes...'" ></div>
 			</div>
 		</div>
 
-		<div id="view-shop-stores" class="hidden">
+		<!-- Shopping Mode: Stores -->
+		<div id="view-shop-stores" x-show="state.mode === 'shop' && state.view === 'stores'">
+			<template x-if="shopStores().length === 0">
+				<div style="text-align:center; padding: 40px; color: var(--text-secondary)">
+					List is empty.<br>Go to "Add Item" to start.
+				</div>
+			</template>
+
+			<template x-for="store in shopStores()" :key="store">
+				<div class="store-row-card" x-on:click="openShopStore(store)">
+					<div class="store-row-name" x-text="store"></div>
+					<div class="store-row-meta" x-text="storeItemCount(store) + ' Items'"></div>
+				</div>
+			</template>
+		</div>
+
+		<!-- Shopping Mode: Items -->
+		<div id="view-shop-items" x-show="state.mode === 'shop' && state.view === 'items'">
+			<div class="store-header">
+				<span class="back-btn" style="margin-right:15px; cursor:pointer;" x-on:click="state.view='stores'">❮</span>
+				<span style="flex:1;" x-text="state.activeShopStore"></span>
 			</div>
 
-		<div id="view-shop-items" class="hidden">
-			</div>
-
+			<template x-for="entry in shopItemsForActiveStore()" :key="entry.store + '::' + entry.itemName">
+				<div class="item-row" :class="{ marked: entry.marked }">
+					<div class="item-left">
+						<div class="item-info">
+							<div class="item-name-line">
+								<span class="item-name" x-text="entry.itemName"></span>
+								<template x-if="entry.quantity !== null && entry.quantity !== ''">
+									<span class="item-qty" x-text="'x' + entry.quantity"></span>
+								</template>
+							</div>
+							<template x-if="entry.notes">
+								<div class="item-note-sub" x-text="'📝 ' + entry.notes"></div>
+							</template>
+						</div>
+					</div>
+					<button class="marked-btn" x-on:click="toggleMarked(entry.store, entry.itemName)" x-text="entry.marked ? 'Undo' : 'Done'"></button>
+				</div>
+			</template>
+		</div>
 	</main>
 
 	<footer>
-		<button id="main-action-btn" class="primary-btn" onclick="app.handleMainAction()">
-			Add Item
-		</button>
+		<button
+			id="main-action-btn"
+			class="primary-btn"
+			:disabled="mainActionDisabled()"
+			:class="{ disabled: mainActionDisabled() }"
+			:style="mainActionStyle()"
+			x-on:click="handleMainAction()"
+			x-text="mainActionLabel()"
+		></button>
 	</footer>
 
-	<div id="overlay-store" class="overlay">
+	<!-- Store Overlay -->
+	<div id="overlay-store" class="overlay" :class="{ open: activeOverlay === 'store' }">
 		<div class="overlay-header">
-			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<button class="close-overlay" x-on:click="closeOverlay()">Cancel</button>
 			<div style="flex:1; text-align:center; font-weight:600">Select Store</div>
 			<div style="width:50px"></div>
 		</div>
 		<div class="input-group">
-			<input type="text" id="input-store" class="overlay-input" placeholder="Enter store name..." oninput="app.renderStoreList()" onkeydown="if(event.key==='Enter'){ event.preventDefault(); app.selectStore(this.value); }">
+			<input
+				type="text"
+				id="input-store"
+				class="overlay-input"
+				placeholder="Enter store name..."
+				x-ref="inputStore"
+				x-model="storeQuery"
+				x-on:keydown.enter.prevent="selectStore(storeQuery)"
+			>
 		</div>
 		<div class="list-group" id="list-stores">
-			</div>
+			<template x-if="storeQuery.trim().length > 0">
+				<div
+					class="list-item"
+					x-on:click="selectStore(storeQuery)"
+					x-on:contextmenu.prevent="previewStore(storeQuery)"
+				>
+					<div>Use: <b x-text="storeQuery"></b></div>
+				</div>
+			</template>
+
+			<template x-for="store in filteredStores()" :key="store">
+				<div
+					class="list-item"
+					:class="{ selected: isStoreSelected(store) }"
+					x-on:click="selectStore(store)"
+					x-on:contextmenu.prevent="previewStore(store)"
+				>
+					<span x-text="store"></span>
+					<span class="delete-icon" x-on:click.stop="deleteStore(store)">✕</span>
+				</div>
+			</template>
+		</div>
 	</div>
 
-	<div id="overlay-item" class="overlay">
+	<!-- Item Overlay -->
+	<div id="overlay-item" class="overlay" :class="{ open: activeOverlay === 'item' }">
 		<div class="overlay-header">
-			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<button class="close-overlay" x-on:click="closeOverlay()">Cancel</button>
 			<div style="flex:1; text-align:center; font-weight:600">Select Item</div>
 			<div style="width:50px"></div>
 		</div>
 		<div class="input-group">
-			<input type="text" id="input-item" class="overlay-input" placeholder="Enter item name..." oninput="app.renderItemList()" onkeydown="if(event.key==='Enter'){ event.preventDefault(); app.selectItem(this.value); }">
+			<input
+				type="text"
+				id="input-item"
+				class="overlay-input"
+				placeholder="Enter item name..."
+				x-ref="inputItem"
+				x-model="itemQuery"
+				x-on:keydown.enter.prevent="selectItem(itemQuery)"
+			>
 		</div>
 		<div class="list-group" id="list-items">
-			</div>
+			<template x-if="itemQuery.trim().length > 0">
+				<div
+					class="list-item"
+					:class="{ present: isItemPresentForStore(draft.store, itemQuery) }"
+					x-on:click="selectItem(itemQuery)"
+					x-on:dblclick.prevent="previewItem(itemQuery)"
+				>
+					<div>Use: <b x-text="itemQuery"></b></div>
+				</div>
+			</template>
+
+			<template x-for="item in filteredItems()" :key="item">
+				<div
+					class="list-item"
+					:class="{ present: isItemPresentExact(draft.store, item), selected: isItemSelected(item) }"
+					x-on:click="selectItem(item)"
+					x-on:dblclick.prevent="previewItem(item)"
+				>
+					<span x-text="item"></span>
+					<span class="delete-icon" x-on:click.stop="deleteItem(item)">✕</span>
+				</div>
+			</template>
+		</div>
 	</div>
 
-	<div id="overlay-quantity" class="overlay">
+	<!-- Quantity Overlay -->
+	<div id="overlay-quantity" class="overlay" :class="{ open: activeOverlay === 'quantity' }">
 		<div class="overlay-header">
-			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<button class="close-overlay" x-on:click="closeOverlay()">Cancel</button>
 			<div style="flex:1; text-align:center; font-weight:600">Quantity</div>
-			<button class="close-overlay" style="font-weight:600" onclick="app.confirmQuantity()">Done</button>
+			<button class="close-overlay" style="font-weight:600" x-on:click="confirmQuantity()">Done</button>
 		</div>
 		<div class="input-group" style="margin-top: 20px;">
-			<input type="number" id="input-qty" class="overlay-input" placeholder="" style="text-align:center; font-size: 32px;" pattern="\d*" inputmode="numeric" onkeydown="if(event.key==='Enter'){ event.preventDefault(); app.confirmQuantity(); }">
+			<input
+				type="number"
+				id="input-qty"
+				class="overlay-input"
+				style="text-align:center; font-size: 32px;"
+				pattern="\d*"
+				inputmode="numeric"
+				x-ref="inputQty"
+				x-model="qtyInput"
+				x-on:keydown.enter.prevent="confirmQuantity()"
+			>
 		</div>
 		<p style="text-align: center; color: var(--text-secondary); margin-top:0;">Leave empty for unspecified</p>
 	</div>
 
-	<div id="overlay-notes" class="overlay">
+	<!-- Notes Overlay -->
+	<div id="overlay-notes" class="overlay" :class="{ open: activeOverlay === 'notes' }">
 		<div class="overlay-header">
-			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<button class="close-overlay" x-on:click="closeOverlay()">Cancel</button>
 			<div style="flex:1; text-align:center; font-weight:600">Notes</div>
-			<button class="close-overlay" style="font-weight:600" onclick="app.confirmNotes()">Done</button>
+			<button class="close-overlay" style="font-weight:600" x-on:click="confirmNotes()">Done</button>
 		</div>
 		<div class="input-group" style="margin-top: 20px; height: 200px;">
-			<textarea id="input-notes" class="overlay-input" style="height:100%; resize:none;" placeholder="Example: Brand, Size, Aisle..."></textarea>
+			<textarea
+				id="input-notes"
+				class="overlay-input"
+				style="height:100%; resize:none;"
+				placeholder="Example: Brand, Size, Aisle..."
+				x-ref="inputNotes"
+				x-model="notesInput"
+			></textarea>
 		</div>
 	</div>
 
 	<script>
 		const STORAGE_KEY = 'todo_buy_data';
 
-		// Tagged template helper to escape interpolated values for safe HTML insertion.
-		function escapeHtml(str) {
-			if (str === null || str === undefined) return '';
-			return String(str)
-				.replace(/&/g, '&amp;')
-				.replace(/</g, '&lt;')
-				.replace(/>/g, '&gt;')
-				.replace(/"/g, '&quot;')
-				.replace(/'/g, '&#39;');
-		}
+		function todoBuyApp() {
+			return {
+				data: {
+					storeHistory: [],
+					itemHistory: {},
+					entries: []
+				},
 
-		function html(strings, ...values) {
-			let result = '';
-			for (let i = 0; i < strings.length; i++) {
-				result += strings[i];
-				if (i < values.length) result += escapeHtml(values[i]);
-			}
-			return result;
-		}
+				draft: {
+					store: null,
+					item: null,
+					qty: null,
+					notes: ''
+				},
 
-		const app = {
-			data: {
-				storeHistory: [],
-				itemHistory: {},
-				entries: []
-			},
+				state: {
+					mode: 'add',
+					view: 'stores',
+					activeShopStore: null
+				},
 
-			// Temporary state for Add Item form
-			draft: {
-				store: null,
-				item: null,
-				qty: null, // null means unspecified
-				notes: ''
-			},
+				activeOverlay: null,
+				storeQuery: '',
+				itemQuery: '',
+				qtyInput: '',
+				notesInput: '',
+				saveFlash: false,
+				saveFlashTimer: null,
 
-			state: {
-				mode: 'add', // 'add' | 'shop'
-				view: 'stores', // 'stores' | 'items'
-				activeShopStore: null
-			},
+				holdTimer: null,
 
-			init() {
-				this.loadData();
-				this.render();
-			},
+				init() {
+					this.loadData();
+					this.state.mode = 'add';
+					this.state.view = 'stores';
+					this.state.activeShopStore = null;
+				},
 
-			loadData() {
-				const raw = localStorage.getItem(STORAGE_KEY);
-				if (raw) {
-					this.data = JSON.parse(raw);
-				} else {
-					this.data.storeHistory = ['Grocery', 'Hardware Store'];
-					this.data.itemHistory = { 'Grocery': ['Milk', 'Bread'] };
-				}
-			},
-
-			saveData() {
-				localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
-			},
-
-			/* --- Navigation --- */
-
-			setMode(mode) {
-				this.state.mode = mode;
-				this.state.view = 'stores';
-				this.state.activeShopStore = null;
-
-				// UI Updates
-				document.getElementById('btn-mode-add').className = mode === 'add' ? 'mode-btn active' : 'mode-btn';
-				document.getElementById('btn-mode-shop').className = mode === 'shop' ? 'mode-btn active' : 'mode-btn';
-
-				const btn = document.getElementById('main-action-btn');
-				// Let renderAddForm determine the exact Add vs Update label when in 'add' mode.
-				if (mode === 'shop') {
-					btn.textContent = 'Complete Shopping';
-					btn.disabled = false;
-					btn.classList.remove('disabled');
-				}
-				btn.className = 'primary-btn'; // Reset color
-
-				this.render();
-			},
-
-			/* --- Rendering --- */
-
-			render() {
-				const addView = document.getElementById('view-add');
-				const shopStoreView = document.getElementById('view-shop-stores');
-				const shopItemView = document.getElementById('view-shop-items');
-
-				addView.classList.add('hidden');
-				shopStoreView.classList.add('hidden');
-				shopItemView.classList.add('hidden');
-
-				if (this.state.mode === 'add') {
-					addView.classList.remove('hidden');
-					this.renderAddForm();
-				} else {
-					if (this.state.view === 'stores') {
-						shopStoreView.classList.remove('hidden');
-						this.renderShopStores();
+				loadData() {
+					const raw = localStorage.getItem(STORAGE_KEY);
+					if (raw) {
+						this.data = JSON.parse(raw);
 					} else {
-						shopItemView.classList.remove('hidden');
-						this.renderShopItems();
+						this.data.storeHistory = ['Grocery', 'Hardware Store'];
+						this.data.itemHistory = { 'Grocery': ['Milk', 'Bread'] };
 					}
-				}
-			},
+				},
 
-			/* --- Add Item Mode --- */
+				saveData() {
+					localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+				},
 
-			renderAddForm() {
-				const s = this.draft.store;
-				const i = this.draft.item;
+				setMode(mode) {
+					this.state.mode = mode;
+					this.state.view = 'stores';
+					this.state.activeShopStore = null;
+					this.closeOverlay();
+				},
 
-				const dispStore = document.getElementById('disp-store');
-				dispStore.textContent = s ? s : 'Select Store...';
-				dispStore.className = s ? 'value' : 'value placeholder';
-
-				const dispItem = document.getElementById('disp-item');
-				dispItem.textContent = i ? i : 'Select Item...';
-				dispItem.className = i ? 'value' : 'value placeholder';
-
-				// Quantity Handling
-				const q = this.draft.qty;
-				const dispQty = document.getElementById('disp-qty');
-				dispQty.textContent = (q === null || q === '') ? 'Tap to enter quantity...' : q;
-				dispQty.className = (q === null || q === '') ? 'value placeholder' : 'value';
-
-				const n = this.draft.notes;
-				const dispNotes = document.getElementById('disp-notes');
-				dispNotes.textContent = n ? n : 'Tap to add notes...';
-				dispNotes.className = n ? 'value' : 'value placeholder';
-
-				// Disable dependent cards until required selections are made
-				const storeCard = document.getElementById('card-store');
-				const itemCard = document.getElementById('card-item');
-				const qtyCard = document.getElementById('card-quantity');
-				const notesCard = document.getElementById('card-notes');
-
-				storeCard.classList.remove('disabled');
-				const canPickItem = !!s;
-				const canPickDetails = !!s && !!i;
-				itemCard.classList.toggle('disabled', !canPickItem);
-				qtyCard.classList.toggle('disabled', !canPickDetails);
-				notesCard.classList.toggle('disabled', !canPickDetails);
-
-				// Footer button text logic
-				const btn = document.getElementById('main-action-btn');
-				if (this.state.mode === 'shop') {
-					btn.textContent = 'Complete Shopping';
-					btn.disabled = false;
-					btn.classList.remove('disabled');
-				} else {
-					// Default to Add Item; if the current draft matches an existing entry, show Update Item
-					let label = 'Add Item';
-					if (s && i) {
-						const exists = this.data.entries.some(e => e.store === s && e.itemName === i);
-						if (exists) label = 'Update Item';
+				mainActionLabel() {
+					if (this.saveFlash) return 'Saved!';
+					if (this.state.mode === 'shop') return 'Complete Shopping';
+					if (this.draft.store && this.draft.item) {
+						return this.entryExistsExact(this.draft.store, this.draft.item) ? 'Update Item' : 'Add Item';
 					}
-					btn.textContent = label;
-					const canSave = !!s && !!i;
-					btn.disabled = !canSave;
-					btn.classList.toggle('disabled', !canSave);
-				}
-			},
+					return 'Add Item';
+				},
 
-			openOverlay(type) {
-				if (type === 'item' && !this.draft.store) {
-					return;
-				}
+				mainActionDisabled() {
+					if (this.saveFlash) return false;
+					if (this.state.mode === 'shop') return false;
+					return !(this.draft.store && this.draft.item);
+				},
 
-				if ((type === 'quantity' || type === 'notes') && (!this.draft.store || !this.draft.item)) {
-					return;
-				}
-
-				document.getElementById(`overlay-${type}`).classList.add('open');
-
-				if(type === 'store') {
-					document.getElementById('input-store').value = '';
-					document.getElementById('input-store').focus();
-					this.renderStoreList();
-				}
-				if(type === 'item') {
-					document.getElementById('input-item').value = '';
-					document.getElementById('input-item').focus();
-					this.renderItemList();
-				}
-				if(type === 'quantity') {
-					document.getElementById('input-qty').value = this.draft.qty;
-					document.getElementById('input-qty').focus();
-				}
-				if(type === 'notes') {
-					document.getElementById('input-notes').value = this.draft.notes;
-					document.getElementById('input-notes').focus();
-				}
-			},
-
-			closeOverlay() {
-				document.querySelectorAll('.overlay').forEach(el => el.classList.remove('open'));
-			},
-
-			/* --- Lists Logic --- */
-
-			renderStoreList() {
-				const query = document.getElementById('input-store').value.toLowerCase();
-				const container = document.getElementById('list-stores');
-				container.innerHTML = '';
-
-				if (query.length > 0) {
-					const div = document.createElement('div');
-					const typed = document.getElementById('input-store').value;
-					const isSelected = this.draft.store && typed.toLowerCase() === String(this.draft.store).toLowerCase();
-					div.className = 'list-item';
-					div.innerHTML = html`<div>Use: <b>${typed}</b></div>`;
-					div.onclick = () => this.selectStore(document.getElementById('input-store').value);
-					div.addEventListener('contextmenu', (ev) => {
-						ev.preventDefault();
-						app.previewStore(typed);
-					});
-					container.appendChild(div);
-				}
-
-				this.data.storeHistory.forEach(store => {
-					if (store.toLowerCase().includes(query)) {
-						const div = document.createElement('div');
-						const isSelected = this.draft.store && store.toLowerCase() === String(this.draft.store).toLowerCase();
-						div.className = 'list-item' + (isSelected ? ' selected' : '');
-						const nameSpan = document.createElement('span');
-						nameSpan.textContent = store;
-						const delSpan = document.createElement('span');
-						delSpan.className = 'delete-icon';
-						delSpan.setAttribute('data-store', store);
-						delSpan.textContent = '✕';
-						div.appendChild(nameSpan);
-						div.appendChild(delSpan);
-						div.onclick = () => this.selectStore(store);
-						div.addEventListener('contextmenu', (ev) => {
-							ev.preventDefault();
-							app.previewStore(store);
-						});
-						container.appendChild(div);
-						// attach delete handler
-						delSpan.addEventListener('click', (ev) => { ev.stopPropagation(); app.deleteStore(store); });
+				mainActionStyle() {
+					if (this.saveFlash) {
+						return {
+							backgroundColor: '#32D74B',
+							color: '#FFFFFF'
+						};
 					}
-				});
-			},
+					return {};
+				},
 
-			previewStore(name) {
-				const input = document.getElementById('input-store');
-				input.value = name || '';
-				input.focus();
-				this.renderStoreList();
-			},
+				handleMainAction() {
+					if (this.state.mode === 'add') {
+						this.addEntry();
+						return;
+					}
+					this.completeShopping();
+				},
 
-			selectStore(name) {
-				name = (name || '').trim();
-				if (!name) return;
-				if (this.draft.store !== name) this.draft.item = null;
-				this.draft.store = name;
-				if (!this.data.storeHistory.includes(name)) {
-					this.data.storeHistory.push(name);
+				openOverlay(type) {
+					if (type === 'item' && !this.draft.store) return;
+					if ((type === 'quantity' || type === 'notes') && (!this.draft.store || !this.draft.item)) return;
+
+					this.activeOverlay = type;
+
+					if (type === 'store') {
+						this.storeQuery = '';
+						this.$nextTick(() => this.$refs.inputStore && this.$refs.inputStore.focus());
+					}
+					if (type === 'item') {
+						this.itemQuery = '';
+						this.$nextTick(() => this.$refs.inputItem && this.$refs.inputItem.focus());
+					}
+					if (type === 'quantity') {
+						this.qtyInput = (this.draft.qty === null || this.draft.qty === undefined) ? '' : String(this.draft.qty);
+						this.$nextTick(() => this.$refs.inputQty && this.$refs.inputQty.focus());
+					}
+					if (type === 'notes') {
+						this.notesInput = this.draft.notes || '';
+						this.$nextTick(() => this.$refs.inputNotes && this.$refs.inputNotes.focus());
+					}
+				},
+
+				closeOverlay() {
+					this.activeOverlay = null;
+				},
+
+				filteredStores() {
+					const q = (this.storeQuery || '').toLowerCase();
+					return (this.data.storeHistory || []).filter(s => String(s).toLowerCase().includes(q));
+				},
+
+				isStoreSelected(store) {
+					return !!this.draft.store && String(this.draft.store).toLowerCase() === String(store).toLowerCase();
+				},
+
+				previewStore(name) {
+					this.storeQuery = name || '';
+					this.$nextTick(() => this.$refs.inputStore && this.$refs.inputStore.focus());
+				},
+
+				selectStore(name) {
+					name = (name || '').trim();
+					if (!name) return;
+					if (this.draft.store !== name) this.draft.item = null;
+					this.draft.store = name;
+					if (!this.data.storeHistory.includes(name)) {
+						this.data.storeHistory.push(name);
+						this.saveData();
+					}
+					this.closeOverlay();
+				},
+
+				deleteStore(name) {
+					if (confirm(`Delete "${name}" from history?`)) {
+						this.data.storeHistory = (this.data.storeHistory || []).filter(s => s !== name);
+						if (this.data.itemHistory) delete this.data.itemHistory[name];
+						this.saveData();
+					}
+				},
+
+				filteredItems() {
+					const store = this.draft.store;
+					const history = (this.data.itemHistory && store) ? (this.data.itemHistory[store] || []) : [];
+					const q = (this.itemQuery || '').toLowerCase();
+					return history.filter(i => String(i).toLowerCase().includes(q));
+				},
+
+				isItemSelected(item) {
+					return !!this.draft.item && String(this.draft.item).toLowerCase() === String(item).toLowerCase();
+				},
+
+				previewItem(name) {
+					this.itemQuery = name || '';
+					this.$nextTick(() => this.$refs.inputItem && this.$refs.inputItem.focus());
+				},
+
+				isItemPresentForStore(store, itemName) {
+					if (!store || !itemName) return false;
+					const needle = String(itemName).toLowerCase();
+					return (this.data.entries || []).some(e => e.store === store && String(e.itemName).toLowerCase() === needle);
+				},
+
+				isItemPresentExact(store, itemName) {
+					if (!store || !itemName) return false;
+					return (this.data.entries || []).some(e => e.store === store && e.itemName === itemName);
+				},
+
+				entryExistsExact(store, itemName) {
+					return (this.data.entries || []).some(e => e.store === store && e.itemName === itemName);
+				},
+
+				selectItem(name) {
+					name = (name || '').trim();
+					if (!name) return;
+					if (!this.draft.store) return;
+
+					this.draft.item = name;
+
+					if (!this.data.itemHistory[this.draft.store]) {
+						this.data.itemHistory[this.draft.store] = [];
+					}
+					if (!this.data.itemHistory[this.draft.store].includes(name)) {
+						this.data.itemHistory[this.draft.store].push(name);
+						this.saveData();
+					}
+
+					this.closeOverlay();
+
+					const existing = (this.data.entries || []).find(e => e.store === this.draft.store && e.itemName === name);
+					if (existing) {
+						this.draft.qty = existing.quantity;
+						this.draft.notes = existing.notes;
+					} else {
+						this.draft.qty = null;
+						this.draft.notes = '';
+					}
+				},
+
+				deleteItem(name) {
+					name = (name || '').trim();
+					if (!name) return;
+					const s = this.draft.store;
+					if (!s) return;
+					if (!this.data.itemHistory[s]) this.data.itemHistory[s] = [];
+					this.data.itemHistory[s] = this.data.itemHistory[s].filter(i => i !== name);
 					this.saveData();
-				}
-				this.closeOverlay();
-				this.renderAddForm();
-			},
+				},
 
-			deleteStore(name) {
-				if(confirm(`Delete "${name}" from history?`)) {
-					this.data.storeHistory = this.data.storeHistory.filter(s => s !== name);
-					delete this.data.itemHistory[name];
-					this.saveData();
-					this.renderStoreList();
-				}
-			},
-
-			renderItemList() {
-				const query = document.getElementById('input-item').value.toLowerCase();
-				const container = document.getElementById('list-items');
-				container.innerHTML = '';
-				const history = this.data.itemHistory[this.draft.store] || [];
-
-				const typedVal = document.getElementById('input-item').value;
-				if (query.length > 0) {
-					const useVal = typedVal;
-					const isPresent = this.data.entries.some(e => e.store === this.draft.store && e.itemName.toLowerCase() === useVal.toLowerCase());
-					const isSelected = this.draft.item && useVal.toLowerCase() === String(this.draft.item).toLowerCase();
-					const div = document.createElement('div');
-					div.className = 'list-item' + (isPresent ? ' present' : '');
-					div.innerHTML = html`<div>Use: <b>${useVal}</b></div>`;
-					div.onclick = () => this.selectItem(useVal);
-					div.addEventListener('dblclick', (ev) => {
-						ev.preventDefault();
-						app.previewItem(useVal);
-					});
-					container.appendChild(div);
-				}
-
-				history.forEach(item => {
-					if (item.toLowerCase().includes(query)) {
-						const isPresent = this.data.entries.some(e => e.store === this.draft.store && e.itemName === item);
-						const isSelected = this.draft.item && item.toLowerCase() === String(this.draft.item).toLowerCase();
-						const div = document.createElement('div');
-						div.className = 'list-item' + (isPresent ? ' present' : '') + (isSelected ? ' selected' : '');
-						const nameSpan = document.createElement('span');
-						nameSpan.textContent = item;
-						const delSpan = document.createElement('span');
-						delSpan.className = 'delete-icon';
-						delSpan.setAttribute('data-item', item);
-						delSpan.textContent = '✕';
-						div.appendChild(nameSpan);
-						div.appendChild(delSpan);
-						div.onclick = () => this.selectItem(item);
-						div.addEventListener('dblclick', (ev) => {
-							ev.preventDefault();
-							app.previewItem(item);
-						});
-						container.appendChild(div);
-						// attach delete handler
-						delSpan.addEventListener('click', (ev) => { ev.stopPropagation(); app.deleteItem(item); });
+				confirmQuantity() {
+					const val = (this.qtyInput ?? '').toString();
+					if (val === '') {
+						this.draft.qty = null;
+					} else {
+						this.draft.qty = parseInt(val);
 					}
-				});
-			},
+					this.closeOverlay();
+				},
 
-			previewItem(name) {
-				const input = document.getElementById('input-item');
-				input.value = name || '';
-				input.focus();
-				this.renderItemList();
-			},
+				confirmNotes() {
+					this.draft.notes = (this.notesInput || '').trim();
+					this.closeOverlay();
+				},
 
-			selectItem(name) {
-				name = (name || '').trim();
-				if (!name) return;
-				this.draft.item = name;
+				addEntry() {
+					if (!this.draft.store || !this.draft.item) return;
 
-				// Persist the item into history immediately when the user selects/enters it
-				if (!this.data.itemHistory[this.draft.store]) {
-					this.data.itemHistory[this.draft.store] = [];
-				}
-				if (!this.data.itemHistory[this.draft.store].includes(name)) {
-					this.data.itemHistory[this.draft.store].push(name);
+					if (!this.data.itemHistory[this.draft.store]) {
+						this.data.itemHistory[this.draft.store] = [];
+					}
+					if (!this.data.itemHistory[this.draft.store].includes(this.draft.item)) {
+						this.data.itemHistory[this.draft.store].push(this.draft.item);
+					}
+
+					const idx = (this.data.entries || []).findIndex(e => e.store === this.draft.store && e.itemName === this.draft.item);
+					const newEntry = {
+						store: this.draft.store,
+						itemName: this.draft.item,
+						quantity: this.draft.qty,
+						notes: this.draft.notes,
+						marked: false
+					};
+
+					if (idx > -1) {
+						this.data.entries[idx] = newEntry;
+					} else {
+						this.data.entries.push(newEntry);
+					}
+
 					this.saveData();
-				}
 
-				this.closeOverlay();
+					// Feedback: keep the button showing Saved!/green for ~1s.
+					this.saveFlash = true;
+					if (this.saveFlashTimer) clearTimeout(this.saveFlashTimer);
+					this.saveFlashTimer = setTimeout(() => {
+						this.saveFlash = false;
+						this.saveFlashTimer = null;
+					}, 1000);
 
-				// Pre-fill
-				const existing = this.data.entries.find(e => e.store === this.draft.store && e.itemName === name);
-				if (existing) {
-					this.draft.qty = existing.quantity;
-					this.draft.notes = existing.notes;
-				} else {
+					this.draft.item = null;
 					this.draft.qty = null;
 					this.draft.notes = '';
-				}
-				this.renderAddForm();
-			},
+				},
 
-			deleteItem(name) {
-				name = (name || '').trim();
-				if (!name) return;
-				const s = this.draft.store;
-				this.data.itemHistory[s] = this.data.itemHistory[s].filter(i => i !== name);
-				this.saveData();
-				this.renderItemList();
-			},
+				shopStores() {
+					const stores = [...new Set((this.data.entries || []).map(e => e.store))];
+					stores.sort((a, b) => this.storeItemCount(b) - this.storeItemCount(a));
+					return stores;
+				},
 
-			confirmQuantity() {
-				const val = document.getElementById('input-qty').value;
-				if (val === '') {
-					this.draft.qty = null;
-				} else {
-					this.draft.qty = parseInt(val);
-				}
-				this.closeOverlay();
-				this.renderAddForm();
-			},
+				storeItemCount(store) {
+					return (this.data.entries || []).filter(e => e.store === store).length;
+				},
 
-			confirmNotes() {
-				this.draft.notes = document.getElementById('input-notes').value.trim();
-				this.closeOverlay();
-				this.renderAddForm();
-			},
+				openShopStore(store) {
+					this.state.view = 'items';
+					this.state.activeShopStore = store;
+				},
 
-			/* --- Actions --- */
+				shopItemsForActiveStore() {
+					const store = this.state.activeShopStore;
+					return (this.data.entries || []).filter(e => e.store === store);
+				},
 
-			handleMainAction() {
-				if (this.state.mode === 'add') {
-					this.addEntry();
-				} else {
-					this.completeShopping();
-				}
-			},
-
-			addEntry() {
-				if (!this.draft.store || !this.draft.item) {
-					return;
-				}
-
-				if (!this.data.itemHistory[this.draft.store]) {
-					this.data.itemHistory[this.draft.store] = [];
-				}
-				if (!this.data.itemHistory[this.draft.store].includes(this.draft.item)) {
-					this.data.itemHistory[this.draft.store].push(this.draft.item);
-				}
-
-				const idx = this.data.entries.findIndex(e => e.store === this.draft.store && e.itemName === this.draft.item);
-
-				const newEntry = {
-					store: this.draft.store,
-					itemName: this.draft.item,
-					quantity: this.draft.qty, // can be null
-					notes: this.draft.notes,
-					marked: false
-				};
-
-				if (idx > -1) {
-					this.data.entries[idx] = newEntry;
-				} else {
-					this.data.entries.push(newEntry);
-				}
-
-				this.saveData();
-
-				// Feedback
-				const btn = document.getElementById('main-action-btn');
-				const origText = btn.textContent;
-				btn.textContent = "Saved!";
-				btn.style.backgroundColor = "#32D74B"; // iOS Green
-
-				this.draft.item = null;
-				this.draft.qty = null;
-				this.draft.notes = '';
-
-				setTimeout(() => {
-					btn.textContent = origText;
-					btn.style.backgroundColor = "";
-					this.renderAddForm();
-				}, 1000);
-			},
-
-			/* --- Shopping Mode --- */
-
-			renderShopStores() {
-				const container = document.getElementById('view-shop-stores');
-				container.innerHTML = '';
-
-				// Sort stores by number of items descending
-				const activeStores = [...new Set(this.data.entries.map(e => e.store))];
-				activeStores.sort((a, b) => {
-					const countA = this.data.entries.filter(e => e.store === a).length;
-					const countB = this.data.entries.filter(e => e.store === b).length;
-					return countB - countA;
-				});
-
-				if (activeStores.length === 0) {
-					container.innerHTML = html`<div style="text-align:center; padding: 40px; color: var(--text-secondary)">List is empty.<br>Go to "Add Item" to start.</div>`;
-					return;
-				}
-
-				activeStores.forEach(store => {
-					const count = this.data.entries.filter(e => e.store === store).length;
-
-					// render as HTML string but avoid interpolating raw values into event handlers
-					const safeRow = html`
-						<div class="store-row-card" data-store="${store}">
-							<div class="store-row-name">${store}</div>
-							<div class="store-row-meta">${count} Items</div>
-						</div>
-					`;
-					container.insertAdjacentHTML('beforeend', safeRow);
-					// attach click handler
-					container.lastElementChild.addEventListener('click', () => {
-						this.state.view = 'items';
-						this.state.activeShopStore = store;
-						this.render();
-					});
-				});
-			},
-
-			renderShopItems() {
-				const container = document.getElementById('view-shop-items');
-				const storeName = this.state.activeShopStore;
-
-				let markup = html`<div class="store-header">
-						<span class="back-btn" style="margin-right:15px; cursor:pointer;">❮</span>
-						<span style="flex:1;">${storeName}</span>
-					</div>`;
-
-				const items = this.data.entries.filter(e => e.store === storeName);
-				// Preserve original entry order to avoid jarring reordering when toggling Done/Undo.
-
-				items.forEach(entry => {
-					const markedClass = entry.marked ? 'marked' : '';
-					const btnText = entry.marked ? 'Undo' : 'Done';
-
-					// Logic for display quantity and notes using html helper to escape content
-					const qtyHtml = (entry.quantity !== null && entry.quantity !== '')
-						? html`<span class="item-qty">x${entry.quantity}</span>`
-						: '';
-
-					const noteHtml = entry.notes
-						? html`<div class="item-note-sub">📝 ${entry.notes}</div>`
-						: '';
-
-					markup += `
-						<div class="item-row ${markedClass}">
-							<div class="item-left">
-								<div class="item-info">
-									<div class="item-name-line">
-										<span class="item-name">${escapeHtml(entry.itemName)}</span>
-										${qtyHtml}
-									</div>
-									${noteHtml}
-								</div>
-							</div>
-							<button class="marked-btn" data-store="${escapeHtml(entry.store)}" data-item="${escapeHtml(entry.itemName)}">${btnText}</button>
-						</div>
-					`;
-				});
-
-				container.innerHTML = markup;
-
-				// attach back button handler
-				const back = container.querySelector('.back-btn');
-				if (back) back.addEventListener('click', () => { this.state.view = 'stores'; this.render(); });
-
-				// Attach event listeners to the marked buttons
-				container.querySelectorAll('.marked-btn').forEach(btn => {
-					const s = btn.getAttribute('data-store');
-					const it = btn.getAttribute('data-item');
-					const store = s ? decodeURIComponent(s) : '';
-					const item = it ? decodeURIComponent(it) : '';
-					btn.addEventListener('click', () => app.toggleMarked(store, item));
-				});
-			},
-
-			toggleMarked(store, item) {
-				const entry = this.data.entries.find(e => e.store === store && e.itemName === item);
-				if (entry) {
+				toggleMarked(store, item) {
+					const entry = (this.data.entries || []).find(e => e.store === store && e.itemName === item);
+					if (!entry) return;
 					entry.marked = !entry.marked;
 					this.saveData();
-					this.renderShopItems();
+				},
+
+				completeShopping() {
+					if (this.state.view === 'stores') {
+						if (confirm('Remove ALL items marked Done from ALL stores?')) this.executeCompletion();
+						return;
+					}
+
+					const s = this.state.activeShopStore;
+					if (confirm(`Remove items marked Done from ${s}?`)) this.executeCompletion(s);
+				},
+
+				executeCompletion(specificStore = null) {
+					this.data.entries = (this.data.entries || []).filter(e => {
+						if (specificStore && e.store !== specificStore) return true;
+						return e.marked !== true;
+					});
+
+					(this.data.entries || []).forEach(e => {
+						if (!specificStore || e.store === specificStore) e.marked = false;
+					});
+
+					this.saveData();
+					this.state.view = 'stores';
+				},
+
+				startHold(ev) {
+					if (ev && ev.preventDefault) ev.preventDefault();
+					this.clearHold();
+					this.holdTimer = setTimeout(() => {
+						const ok = confirm('Wipe all saved app data? This will erase your shopping lists and history. Continue?');
+						if (ok) {
+							localStorage.removeItem(STORAGE_KEY);
+							this.data = {
+								storeHistory: ['Grocery', 'Hardware Store'],
+								itemHistory: { 'Grocery': ['Milk', 'Bread'] },
+								entries: []
+							};
+							this.saveData();
+							this.init();
+							alert('Saved data wiped.');
+						}
+						this.clearHold();
+					}, 5000);
+				},
+
+				clearHold() {
+					if (this.holdTimer) {
+						clearTimeout(this.holdTimer);
+						this.holdTimer = null;
+					}
 				}
-			},
-
-			completeShopping() {
-				if (this.state.view === 'stores') {
-					if (confirm("Remove ALL items marked Done from ALL stores?")) {
-						this.executeCompletion();
-					}
-				} else {
-					if (confirm(`Remove items marked Done from ${this.state.activeShopStore}?`)) {
-						this.executeCompletion(this.state.activeShopStore);
-					}
-				}
-			},
-
-			executeCompletion(specificStore = null) {
-				// Remove entries which were marked `marked === true` within the scope (all stores or specificStore).
-				this.data.entries = this.data.entries.filter(e => {
-					if (specificStore && e.store !== specificStore) return true;
-					return e.marked !== true; // Keep only items NOT marked Done
-				});
-
-				// Ensure any remaining items are unmarked for next session
-				this.data.entries.forEach(e => {
-					if (!specificStore || e.store === specificStore) e.marked = false;
-				});
-
-				this.saveData();
-				this.state.view = 'stores';
-				this.render();
-			}
-		};
-
-		document.addEventListener('DOMContentLoaded', () => {
-			app.init();
-		});
-
-		// Hold-to-reset: press and hold the header (h1) for 5 seconds to wipe saved app data.
-		(function() {
-			const HOLD_MS = 5000;
-			let holdTimer = null;
-			const header = document.querySelector('header h1');
-			function clearHoldTimer() {
-				if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-			}
-			function startHold(e) {
-				// Prevent accidental text selection / native behavior
-				e.preventDefault && e.preventDefault();
-				clearHoldTimer();
-				holdTimer = setTimeout(() => {
-					const ok = confirm('Wipe all saved app data? This will erase your shopping lists and history. Continue?');
-					if (ok) {
-						localStorage.removeItem(STORAGE_KEY);
-						// reset in-memory data to defaults
-						app.data = { storeHistory: ['Grocery', 'Hardware Store'], itemHistory: { 'Grocery': ['Milk', 'Bread'] }, entries: [] };
-						app.saveData();
-						app.init();
-						alert('Saved data wiped.');
-					}
-					clearHoldTimer();
-				}, HOLD_MS);
-			}
-			if (header) {
-				header.addEventListener('mousedown', startHold);
-				header.addEventListener('touchstart', startHold, { passive: false });
-				['mouseup','mouseleave','touchend','touchcancel'].forEach(ev => header.addEventListener(ev, clearHoldTimer));
-			}
-		})();
-
+			};
+		}
 	</script>
 </body>
 </html>
