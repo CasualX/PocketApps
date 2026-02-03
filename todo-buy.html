@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<title>Todo: Buy</title>
+	<link rel="icon" type="image/svg+xml" href="icon.svg">
+	<link rel="apple-touch-icon" href="icon.svg">
+	<style>
+		:root {
+			/* Dark Mode Palette */
+			--primary: #0A84FF;
+			--primary-bg: rgba(10, 132, 255, 0.15);
+			--text: #FFFFFF;
+			--text-secondary: #8E8E93;
+			--bg: #000000;
+			--card-bg: #1C1C1E;
+			--border: #38383A;
+			--danger: #FF453A;
+			--header-height: 110px;
+			--footer-height: 80px;
+			--anim-speed: 0.25s;
+			--success: #32D74B;
+			--success-bg: rgba(50,215,75,0.08);
+		}
+
+		* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+		body {
+			margin: 0;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+			background-color: var(--bg);
+			color: var(--text);
+			height: 100vh;
+			overflow: hidden;
+			display: flex;
+			flex-direction: column;
+		}
+
+		/* --- Header & Navigation --- */
+		header {
+			background: rgba(28, 28, 30, 0.85); /* Translucent dark */
+			padding: 15px 15px 5px 15px;
+			position: fixed;
+			top: 0; left: 0; right: 0;
+			z-index: 100;
+			height: var(--header-height);
+			display: flex;
+			flex-direction: column;
+			justify-content: flex-end;
+			backdrop-filter: blur(20px);
+			-webkit-backdrop-filter: blur(20px);
+			border-bottom: 1px solid var(--border);
+		}
+
+		h1 {
+			margin: 0 0 20px 0;
+			font-size: 22px;
+			text-align: center;
+			font-weight: 700;
+			user-select: none;
+		}
+
+		.mode-switch {
+			display: flex;
+			background: #2C2C2E;
+			border-radius: 9px;
+			padding: 2px;
+			height: 36px;
+		}
+
+		.mode-btn {
+			flex: 1;
+			border: none;
+			background: transparent;
+			font-size: 14px;
+			font-weight: 500;
+			color: var(--text);
+			border-radius: 7px;
+			transition: all var(--anim-speed) ease;
+			cursor: pointer;
+		}
+
+		.mode-btn.active {
+			flex: 2;
+			background: #636366;
+			color: white;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+			font-weight: 600;
+		}
+
+		/* --- Main Content Area --- */
+		#app-content {
+			flex: 1;
+			margin-top: var(--header-height);
+			margin-bottom: var(--footer-height);
+			overflow-y: auto;
+			padding: 20px;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.hidden { display: none !important; }
+
+		/* --- Cards & Selectors --- */
+		.card {
+			background: var(--card-bg);
+			border-radius: 10px;
+			padding: 16px;
+			margin-bottom: 12px;
+			display: flex;
+			flex-direction: column; /* Default stack */
+		}
+
+		.selector-card {
+			cursor: pointer;
+			position: relative;
+			transition: opacity var(--anim-speed) ease, filter var(--anim-speed) ease;
+		}
+
+		.selector-card.disabled {
+			opacity: 0.45;
+			filter: saturate(0.6);
+			cursor: not-allowed;
+			pointer-events: none;
+		}
+
+		.selector-card.disabled::after { opacity: 0.35; }
+		.selector-card.disabled .value { color: var(--text-secondary); }
+
+		.selector-card::after {
+			content: '›';
+			position: absolute;
+			right: 15px;
+			top: 50%;
+			transform: translateY(-50%);
+			color: var(--text-secondary);
+			font-size: 20px;
+			font-weight: 300;
+		}
+
+		.label {
+			font-size: 13px;
+			text-transform: uppercase;
+			color: var(--text-secondary);
+			margin-bottom: 6px;
+			font-weight: 600;
+		}
+
+		.value {
+			font-size: 17px;
+			font-weight: 400;
+			min-height: 24px;
+		}
+
+		.value.placeholder { color: var(--text-secondary); opacity: 0.5; }
+
+		/* --- Shopping List Styles (Redesigned) --- */
+
+		.store-header {
+			font-size: 22px;
+			font-weight: 700;
+			margin-bottom: 20px;
+			display: flex;
+			align-items: center;
+			color: var(--primary);
+		}
+
+		/* Store List Row */
+		.store-row-card {
+			background: var(--card-bg);
+			border-radius: 10px;
+			padding: 18px 16px;
+			margin-bottom: 1px; /* Divider look */
+			display: flex;
+			flex-direction: row;
+			justify-content: space-between;
+			align-items: center;
+			cursor: pointer;
+		}
+
+		.store-row-name {
+			font-size: 17px;
+			font-weight: 600;
+			color: var(--text);
+		}
+
+		.store-row-meta {
+			font-size: 15px;
+			color: var(--text-secondary);
+			display: flex;
+			align-items: center;
+		}
+
+		.store-row-meta::after {
+			content: '›';
+			margin-left: 10px;
+			font-size: 18px;
+			color: var(--text-secondary);
+		}
+
+		/* Shopping Item Row */
+		.item-row {
+			background: var(--card-bg);
+			border-radius: 10px;
+			padding: 12px 16px;
+			margin-bottom: 8px;
+			display: flex;
+			flex-direction: row;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.item-row.marked {
+			background: var(--success-bg);
+			border-left: 4px solid var(--success);
+		}
+		.item-row.marked .item-name {
+			color: var(--success);
+			font-weight: 600;
+		}
+		.item-row.marked::before {
+			content: '✔';
+			color: var(--success);
+			margin-right: 12px;
+			font-size: 16px;
+			display: inline-block;
+			vertical-align: middle;
+		}
+
+		.item-left {
+			display: flex;
+			align-items: center;
+			flex: 1;
+			overflow: hidden;
+		}
+
+		.item-info {
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+		}
+
+		.item-name-line {
+			display: flex;
+			align-items: baseline;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.item-name {
+			font-size: 17px;
+			font-weight: 500;
+			margin-right: 8px;
+		}
+
+		.item-qty {
+			font-size: 14px;
+			color: var(--primary);
+			font-weight: 600;
+			background: var(--primary-bg);
+			padding: 2px 6px;
+			border-radius: 4px;
+		}
+
+		.item-note-sub {
+			font-size: 13px;
+			color: var(--text-secondary);
+			margin-top: 2px;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.marked-btn {
+			background: transparent;
+			border: 1px solid var(--border);
+			color: var(--text-secondary);
+			padding: 6px 12px;
+			border-radius: 6px;
+			font-size: 13px;
+			margin-left: 10px;
+			cursor: pointer;
+		}
+
+		.marked .marked-btn {
+			border-color: var(--success);
+			color: var(--success);
+		}
+
+		/* --- Footer --- */
+		footer {
+			position: fixed;
+			bottom: 0; left: 0; right: 0;
+			height: var(--footer-height);
+			background: var(--card-bg);
+			border-top: 1px solid var(--border);
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			padding: 0 20px;
+			z-index: 100;
+			padding-bottom: env(safe-area-inset-bottom);
+		}
+
+		.primary-btn {
+			background: var(--primary);
+			color: white;
+			border: none;
+			width: 100%;
+			height: 50px;
+			border-radius: 12px;
+			font-size: 17px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: background var(--anim-speed) ease, color var(--anim-speed) ease, opacity var(--anim-speed) ease;
+		}
+
+		.primary-btn:active { opacity: 0.8; }
+
+		.primary-btn.disabled,
+		.primary-btn:disabled {
+			background: #2C2C2E;
+			color: var(--text-secondary);
+			cursor: not-allowed;
+			box-shadow: inset 0 0 0 1px var(--border);
+			opacity: 1;
+		}
+
+		/* --- Overlays --- */
+		.overlay {
+			position: fixed;
+			top: 0; left: 0; right: 0; bottom: 0;
+			background: var(--bg);
+			z-index: 200;
+			padding: 20px;
+			padding-top: 60px;
+			transform: translateY(100%);
+			transition: transform var(--anim-speed) cubic-bezier(0.32, 0.72, 0, 1);
+			display: flex;
+			flex-direction: column;
+		}
+
+		.overlay.open { transform: translateY(0); }
+
+		.overlay-header {
+			position: absolute;
+			top: 0; left: 0; right: 0;
+			height: 60px;
+			display: flex;
+			align-items: center;
+			padding: 0 15px;
+			background: var(--card-bg);
+			border-bottom: 1px solid var(--border);
+		}
+
+		.close-overlay {
+			color: var(--primary);
+			font-size: 17px;
+			background: none;
+			border: none;
+			font-weight: 400;
+			cursor: pointer;
+		}
+
+		.input-group {
+			background: var(--card-bg);
+			border-radius: 10px;
+			padding: 0;
+			overflow: hidden;
+			margin-bottom: 20px;
+			margin-top: 20px;
+			border: 1px solid var(--border);
+		}
+
+		.overlay-input {
+			width: 100%;
+			border: none;
+			background: var(--card-bg);
+			color: var(--text);
+			padding: 15px;
+			font-size: 17px;
+			outline: none;
+		}
+
+		.list-group {
+			flex: 1;
+			overflow-y: auto;
+		}
+
+		.list-item {
+			background: var(--card-bg);
+			padding: 15px;
+			border-bottom: 1px solid var(--border);
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			font-size: 17px;
+			cursor: pointer;
+			color: var(--text);
+		}
+		.list-item:first-child { border-top-left-radius: 10px; border-top-right-radius: 10px; }
+		.list-item:last-child { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; border-bottom: none; }
+
+		.delete-icon {
+			color: var(--text-secondary);
+		}
+		.delete-icon:hover { color: var(--danger); }
+
+		/* Mark items already added to the shopping list in the item picker */
+		.list-item.present {
+			background: rgba(123, 189, 255, 0.12);
+			border-left: 2px solid rgba(10,132,255,0.45);
+		}
+		.list-item.present .delete-icon { color: var(--text-secondary); }
+
+		/* Selected row (active store/item) */
+		.list-item.selected {
+			background: rgba(50,215,75,0.06);
+			border-left: 3px solid var(--success);
+		}
+		.list-item.selected::before {
+			content: '✔';
+			color: var(--success);
+			margin-right: 10px;
+			font-size: 14px;
+			display: inline-block;
+			vertical-align: middle;
+		}
+
+	</style>
+</head>
+<body>
+
+	<header>
+		<h1>Todo: Buy</h1>
+		<div class="mode-switch">
+			<button class="mode-btn active" id="btn-mode-add" onclick="app.setMode('add')">Add Item</button>
+			<button class="mode-btn" id="btn-mode-shop" onclick="app.setMode('shop')">Shopping</button>
+		</div>
+	</header>
+
+	<main id="app-content">
+
+		<div id="view-add" class="">
+			<div id="card-store" class="card selector-card" onclick="app.openOverlay('store')">
+				<div class="label">Store</div>
+				<div class="value" id="disp-store">Select Store...</div>
+			</div>
+
+			<div id="card-item" class="card selector-card" onclick="app.openOverlay('item')">
+				<div class="label">Item</div>
+				<div class="value" id="disp-item">Select Item...</div>
+			</div>
+
+			<div id="card-quantity" class="card selector-card" onclick="app.openOverlay('quantity')">
+				<div class="label">Quantity</div>
+				<div class="value" id="disp-qty">Tap to enter quantity...</div>
+			</div>
+
+			<div id="card-notes" class="card selector-card" onclick="app.openOverlay('notes')">
+				<div class="label">Notes</div>
+				<div class="value placeholder" id="disp-notes">Tap to add notes...</div>
+			</div>
+		</div>
+
+		<div id="view-shop-stores" class="hidden">
+			</div>
+
+		<div id="view-shop-items" class="hidden">
+			</div>
+
+	</main>
+
+	<footer>
+		<button id="main-action-btn" class="primary-btn" onclick="app.handleMainAction()">
+			Add Item
+		</button>
+	</footer>
+
+	<div id="overlay-store" class="overlay">
+		<div class="overlay-header">
+			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<div style="flex:1; text-align:center; font-weight:600">Select Store</div>
+			<div style="width:50px"></div>
+		</div>
+		<div class="input-group">
+			<input type="text" id="input-store" class="overlay-input" placeholder="Enter store name..." oninput="app.renderStoreList()" onkeydown="if(event.key==='Enter'){ event.preventDefault(); app.selectStore(this.value); }">
+		</div>
+		<div class="list-group" id="list-stores">
+			</div>
+	</div>
+
+	<div id="overlay-item" class="overlay">
+		<div class="overlay-header">
+			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<div style="flex:1; text-align:center; font-weight:600">Select Item</div>
+			<div style="width:50px"></div>
+		</div>
+		<div class="input-group">
+			<input type="text" id="input-item" class="overlay-input" placeholder="Enter item name..." oninput="app.renderItemList()" onkeydown="if(event.key==='Enter'){ event.preventDefault(); app.selectItem(this.value); }">
+		</div>
+		<div class="list-group" id="list-items">
+			</div>
+	</div>
+
+	<div id="overlay-quantity" class="overlay">
+		<div class="overlay-header">
+			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<div style="flex:1; text-align:center; font-weight:600">Quantity</div>
+			<button class="close-overlay" style="font-weight:600" onclick="app.confirmQuantity()">Done</button>
+		</div>
+		<div class="input-group" style="margin-top: 20px;">
+			<input type="number" id="input-qty" class="overlay-input" placeholder="" style="text-align:center; font-size: 32px;" pattern="\d*" inputmode="numeric" onkeydown="if(event.key==='Enter'){ event.preventDefault(); app.confirmQuantity(); }">
+		</div>
+		<p style="text-align: center; color: var(--text-secondary); margin-top:0;">Leave empty for unspecified</p>
+	</div>
+
+	<div id="overlay-notes" class="overlay">
+		<div class="overlay-header">
+			<button class="close-overlay" onclick="app.closeOverlay()">Cancel</button>
+			<div style="flex:1; text-align:center; font-weight:600">Notes</div>
+			<button class="close-overlay" style="font-weight:600" onclick="app.confirmNotes()">Done</button>
+		</div>
+		<div class="input-group" style="margin-top: 20px; height: 200px;">
+			<textarea id="input-notes" class="overlay-input" style="height:100%; resize:none;" placeholder="Example: Brand, Size, Aisle..."></textarea>
+		</div>
+	</div>
+
+	<script>
+		const STORAGE_KEY = 'todo_buy_data';
+
+		// Tagged template helper to escape interpolated values for safe HTML insertion.
+		function escapeHtml(str) {
+			if (str === null || str === undefined) return '';
+			return String(str)
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#39;');
+		}
+
+		function html(strings, ...values) {
+			let result = '';
+			for (let i = 0; i < strings.length; i++) {
+				result += strings[i];
+				if (i < values.length) result += escapeHtml(values[i]);
+			}
+			return result;
+		}
+
+		const app = {
+			data: {
+				storeHistory: [],
+				itemHistory: {},
+				entries: []
+			},
+
+			// Temporary state for Add Item form
+			draft: {
+				store: null,
+				item: null,
+				qty: null, // null means unspecified
+				notes: ''
+			},
+
+			state: {
+				mode: 'add', // 'add' | 'shop'
+				view: 'stores', // 'stores' | 'items'
+				activeShopStore: null
+			},
+
+			init() {
+				this.loadData();
+				this.render();
+			},
+
+			loadData() {
+				const raw = localStorage.getItem(STORAGE_KEY);
+				if (raw) {
+					this.data = JSON.parse(raw);
+				} else {
+					this.data.storeHistory = ['Grocery', 'Hardware Store'];
+					this.data.itemHistory = { 'Grocery': ['Milk', 'Bread'] };
+				}
+			},
+
+			saveData() {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+			},
+
+			/* --- Navigation --- */
+
+			setMode(mode) {
+				this.state.mode = mode;
+				this.state.view = 'stores';
+				this.state.activeShopStore = null;
+
+				// UI Updates
+				document.getElementById('btn-mode-add').className = mode === 'add' ? 'mode-btn active' : 'mode-btn';
+				document.getElementById('btn-mode-shop').className = mode === 'shop' ? 'mode-btn active' : 'mode-btn';
+
+				const btn = document.getElementById('main-action-btn');
+				// Let renderAddForm determine the exact Add vs Update label when in 'add' mode.
+				if (mode === 'shop') {
+					btn.textContent = 'Complete Shopping';
+					btn.disabled = false;
+					btn.classList.remove('disabled');
+				}
+				btn.className = 'primary-btn'; // Reset color
+
+				this.render();
+			},
+
+			/* --- Rendering --- */
+
+			render() {
+				const addView = document.getElementById('view-add');
+				const shopStoreView = document.getElementById('view-shop-stores');
+				const shopItemView = document.getElementById('view-shop-items');
+
+				addView.classList.add('hidden');
+				shopStoreView.classList.add('hidden');
+				shopItemView.classList.add('hidden');
+
+				if (this.state.mode === 'add') {
+					addView.classList.remove('hidden');
+					this.renderAddForm();
+				} else {
+					if (this.state.view === 'stores') {
+						shopStoreView.classList.remove('hidden');
+						this.renderShopStores();
+					} else {
+						shopItemView.classList.remove('hidden');
+						this.renderShopItems();
+					}
+				}
+			},
+
+			/* --- Add Item Mode --- */
+
+			renderAddForm() {
+				const s = this.draft.store;
+				const i = this.draft.item;
+
+				const dispStore = document.getElementById('disp-store');
+				dispStore.textContent = s ? s : 'Select Store...';
+				dispStore.className = s ? 'value' : 'value placeholder';
+
+				const dispItem = document.getElementById('disp-item');
+				dispItem.textContent = i ? i : 'Select Item...';
+				dispItem.className = i ? 'value' : 'value placeholder';
+
+				// Quantity Handling
+				const q = this.draft.qty;
+				const dispQty = document.getElementById('disp-qty');
+				dispQty.textContent = (q === null || q === '') ? 'Tap to enter quantity...' : q;
+				dispQty.className = (q === null || q === '') ? 'value placeholder' : 'value';
+
+				const n = this.draft.notes;
+				const dispNotes = document.getElementById('disp-notes');
+				dispNotes.textContent = n ? n : 'Tap to add notes...';
+				dispNotes.className = n ? 'value' : 'value placeholder';
+
+				// Disable dependent cards until required selections are made
+				const storeCard = document.getElementById('card-store');
+				const itemCard = document.getElementById('card-item');
+				const qtyCard = document.getElementById('card-quantity');
+				const notesCard = document.getElementById('card-notes');
+
+				storeCard.classList.remove('disabled');
+				const canPickItem = !!s;
+				const canPickDetails = !!s && !!i;
+				itemCard.classList.toggle('disabled', !canPickItem);
+				qtyCard.classList.toggle('disabled', !canPickDetails);
+				notesCard.classList.toggle('disabled', !canPickDetails);
+
+				// Footer button text logic
+				const btn = document.getElementById('main-action-btn');
+				if (this.state.mode === 'shop') {
+					btn.textContent = 'Complete Shopping';
+					btn.disabled = false;
+					btn.classList.remove('disabled');
+				} else {
+					// Default to Add Item; if the current draft matches an existing entry, show Update Item
+					let label = 'Add Item';
+					if (s && i) {
+						const exists = this.data.entries.some(e => e.store === s && e.itemName === i);
+						if (exists) label = 'Update Item';
+					}
+					btn.textContent = label;
+					const canSave = !!s && !!i;
+					btn.disabled = !canSave;
+					btn.classList.toggle('disabled', !canSave);
+				}
+			},
+
+			openOverlay(type) {
+				if (type === 'item' && !this.draft.store) {
+					return;
+				}
+
+				if ((type === 'quantity' || type === 'notes') && (!this.draft.store || !this.draft.item)) {
+					return;
+				}
+
+				document.getElementById(`overlay-${type}`).classList.add('open');
+
+				if(type === 'store') {
+					document.getElementById('input-store').value = '';
+					document.getElementById('input-store').focus();
+					this.renderStoreList();
+				}
+				if(type === 'item') {
+					document.getElementById('input-item').value = '';
+					document.getElementById('input-item').focus();
+					this.renderItemList();
+				}
+				if(type === 'quantity') {
+					document.getElementById('input-qty').value = this.draft.qty;
+					document.getElementById('input-qty').focus();
+				}
+				if(type === 'notes') {
+					document.getElementById('input-notes').value = this.draft.notes;
+					document.getElementById('input-notes').focus();
+				}
+			},
+
+			closeOverlay() {
+				document.querySelectorAll('.overlay').forEach(el => el.classList.remove('open'));
+			},
+
+			/* --- Lists Logic --- */
+
+			renderStoreList() {
+				const query = document.getElementById('input-store').value.toLowerCase();
+				const container = document.getElementById('list-stores');
+				container.innerHTML = '';
+
+				if (query.length > 0) {
+					const div = document.createElement('div');
+					const typed = document.getElementById('input-store').value;
+					const isSelected = this.draft.store && typed.toLowerCase() === String(this.draft.store).toLowerCase();
+					div.className = 'list-item';
+					div.innerHTML = html`<div>Use: <b>${typed}</b></div>`;
+					div.onclick = () => this.selectStore(document.getElementById('input-store').value);
+					div.addEventListener('contextmenu', (ev) => {
+						ev.preventDefault();
+						app.previewStore(typed);
+					});
+					container.appendChild(div);
+				}
+
+				this.data.storeHistory.forEach(store => {
+					if (store.toLowerCase().includes(query)) {
+						const div = document.createElement('div');
+						const isSelected = this.draft.store && store.toLowerCase() === String(this.draft.store).toLowerCase();
+						div.className = 'list-item' + (isSelected ? ' selected' : '');
+						const nameSpan = document.createElement('span');
+						nameSpan.textContent = store;
+						const delSpan = document.createElement('span');
+						delSpan.className = 'delete-icon';
+						delSpan.setAttribute('data-store', store);
+						delSpan.textContent = '✕';
+						div.appendChild(nameSpan);
+						div.appendChild(delSpan);
+						div.onclick = () => this.selectStore(store);
+						div.addEventListener('contextmenu', (ev) => {
+							ev.preventDefault();
+							app.previewStore(store);
+						});
+						container.appendChild(div);
+						// attach delete handler
+						delSpan.addEventListener('click', (ev) => { ev.stopPropagation(); app.deleteStore(store); });
+					}
+				});
+			},
+
+			previewStore(name) {
+				const input = document.getElementById('input-store');
+				input.value = name || '';
+				input.focus();
+				this.renderStoreList();
+			},
+
+			selectStore(name) {
+				name = (name || '').trim();
+				if (!name) return;
+				if (this.draft.store !== name) this.draft.item = null;
+				this.draft.store = name;
+				if (!this.data.storeHistory.includes(name)) {
+					this.data.storeHistory.push(name);
+					this.saveData();
+				}
+				this.closeOverlay();
+				this.renderAddForm();
+			},
+
+			deleteStore(name) {
+				if(confirm(`Delete "${name}" from history?`)) {
+					this.data.storeHistory = this.data.storeHistory.filter(s => s !== name);
+					delete this.data.itemHistory[name];
+					this.saveData();
+					this.renderStoreList();
+				}
+			},
+
+			renderItemList() {
+				const query = document.getElementById('input-item').value.toLowerCase();
+				const container = document.getElementById('list-items');
+				container.innerHTML = '';
+				const history = this.data.itemHistory[this.draft.store] || [];
+
+				const typedVal = document.getElementById('input-item').value;
+				if (query.length > 0) {
+					const useVal = typedVal;
+					const isPresent = this.data.entries.some(e => e.store === this.draft.store && e.itemName.toLowerCase() === useVal.toLowerCase());
+					const isSelected = this.draft.item && useVal.toLowerCase() === String(this.draft.item).toLowerCase();
+					const div = document.createElement('div');
+					div.className = 'list-item' + (isPresent ? ' present' : '');
+					div.innerHTML = html`<div>Use: <b>${useVal}</b></div>`;
+					div.onclick = () => this.selectItem(useVal);
+					div.addEventListener('dblclick', (ev) => {
+						ev.preventDefault();
+						app.previewItem(useVal);
+					});
+					container.appendChild(div);
+				}
+
+				history.forEach(item => {
+					if (item.toLowerCase().includes(query)) {
+						const isPresent = this.data.entries.some(e => e.store === this.draft.store && e.itemName === item);
+						const isSelected = this.draft.item && item.toLowerCase() === String(this.draft.item).toLowerCase();
+						const div = document.createElement('div');
+						div.className = 'list-item' + (isPresent ? ' present' : '') + (isSelected ? ' selected' : '');
+						const nameSpan = document.createElement('span');
+						nameSpan.textContent = item;
+						const delSpan = document.createElement('span');
+						delSpan.className = 'delete-icon';
+						delSpan.setAttribute('data-item', item);
+						delSpan.textContent = '✕';
+						div.appendChild(nameSpan);
+						div.appendChild(delSpan);
+						div.onclick = () => this.selectItem(item);
+						div.addEventListener('dblclick', (ev) => {
+							ev.preventDefault();
+							app.previewItem(item);
+						});
+						container.appendChild(div);
+						// attach delete handler
+						delSpan.addEventListener('click', (ev) => { ev.stopPropagation(); app.deleteItem(item); });
+					}
+				});
+			},
+
+			previewItem(name) {
+				const input = document.getElementById('input-item');
+				input.value = name || '';
+				input.focus();
+				this.renderItemList();
+			},
+
+			selectItem(name) {
+				name = (name || '').trim();
+				if (!name) return;
+				this.draft.item = name;
+
+				// Persist the item into history immediately when the user selects/enters it
+				if (!this.data.itemHistory[this.draft.store]) {
+					this.data.itemHistory[this.draft.store] = [];
+				}
+				if (!this.data.itemHistory[this.draft.store].includes(name)) {
+					this.data.itemHistory[this.draft.store].push(name);
+					this.saveData();
+				}
+
+				this.closeOverlay();
+
+				// Pre-fill
+				const existing = this.data.entries.find(e => e.store === this.draft.store && e.itemName === name);
+				if (existing) {
+					this.draft.qty = existing.quantity;
+					this.draft.notes = existing.notes;
+				} else {
+					this.draft.qty = null;
+					this.draft.notes = '';
+				}
+				this.renderAddForm();
+			},
+
+			deleteItem(name) {
+				name = (name || '').trim();
+				if (!name) return;
+				const s = this.draft.store;
+				this.data.itemHistory[s] = this.data.itemHistory[s].filter(i => i !== name);
+				this.saveData();
+				this.renderItemList();
+			},
+
+			confirmQuantity() {
+				const val = document.getElementById('input-qty').value;
+				if (val === '') {
+					this.draft.qty = null;
+				} else {
+					this.draft.qty = parseInt(val);
+				}
+				this.closeOverlay();
+				this.renderAddForm();
+			},
+
+			confirmNotes() {
+				this.draft.notes = document.getElementById('input-notes').value.trim();
+				this.closeOverlay();
+				this.renderAddForm();
+			},
+
+			/* --- Actions --- */
+
+			handleMainAction() {
+				if (this.state.mode === 'add') {
+					this.addEntry();
+				} else {
+					this.completeShopping();
+				}
+			},
+
+			addEntry() {
+				if (!this.draft.store || !this.draft.item) {
+					return;
+				}
+
+				if (!this.data.itemHistory[this.draft.store]) {
+					this.data.itemHistory[this.draft.store] = [];
+				}
+				if (!this.data.itemHistory[this.draft.store].includes(this.draft.item)) {
+					this.data.itemHistory[this.draft.store].push(this.draft.item);
+				}
+
+				const idx = this.data.entries.findIndex(e => e.store === this.draft.store && e.itemName === this.draft.item);
+
+				const newEntry = {
+					store: this.draft.store,
+					itemName: this.draft.item,
+					quantity: this.draft.qty, // can be null
+					notes: this.draft.notes,
+					marked: false
+				};
+
+				if (idx > -1) {
+					this.data.entries[idx] = newEntry;
+				} else {
+					this.data.entries.push(newEntry);
+				}
+
+				this.saveData();
+
+				// Feedback
+				const btn = document.getElementById('main-action-btn');
+				const origText = btn.textContent;
+				btn.textContent = "Saved!";
+				btn.style.backgroundColor = "#32D74B"; // iOS Green
+
+				this.draft.item = null;
+				this.draft.qty = null;
+				this.draft.notes = '';
+
+				setTimeout(() => {
+					btn.textContent = origText;
+					btn.style.backgroundColor = "";
+					this.renderAddForm();
+				}, 1000);
+			},
+
+			/* --- Shopping Mode --- */
+
+			renderShopStores() {
+				const container = document.getElementById('view-shop-stores');
+				container.innerHTML = '';
+
+				// Sort stores by number of items descending
+				const activeStores = [...new Set(this.data.entries.map(e => e.store))];
+				activeStores.sort((a, b) => {
+					const countA = this.data.entries.filter(e => e.store === a).length;
+					const countB = this.data.entries.filter(e => e.store === b).length;
+					return countB - countA;
+				});
+
+				if (activeStores.length === 0) {
+					container.innerHTML = html`<div style="text-align:center; padding: 40px; color: var(--text-secondary)">List is empty.<br>Go to "Add Item" to start.</div>`;
+					return;
+				}
+
+				activeStores.forEach(store => {
+					const count = this.data.entries.filter(e => e.store === store).length;
+
+					// render as HTML string but avoid interpolating raw values into event handlers
+					const safeRow = html`
+						<div class="store-row-card" data-store="${store}">
+							<div class="store-row-name">${store}</div>
+							<div class="store-row-meta">${count} Items</div>
+						</div>
+					`;
+					container.insertAdjacentHTML('beforeend', safeRow);
+					// attach click handler
+					container.lastElementChild.addEventListener('click', () => {
+						this.state.view = 'items';
+						this.state.activeShopStore = store;
+						this.render();
+					});
+				});
+			},
+
+			renderShopItems() {
+				const container = document.getElementById('view-shop-items');
+				const storeName = this.state.activeShopStore;
+
+				let markup = html`<div class="store-header">
+						<span class="back-btn" style="margin-right:15px; cursor:pointer;">❮</span>
+						<span style="flex:1;">${storeName}</span>
+					</div>`;
+
+				const items = this.data.entries.filter(e => e.store === storeName);
+				// Preserve original entry order to avoid jarring reordering when toggling Done/Undo.
+
+				items.forEach(entry => {
+					const markedClass = entry.marked ? 'marked' : '';
+					const btnText = entry.marked ? 'Undo' : 'Done';
+
+					// Logic for display quantity and notes using html helper to escape content
+					const qtyHtml = (entry.quantity !== null && entry.quantity !== '')
+						? html`<span class="item-qty">x${entry.quantity}</span>`
+						: '';
+
+					const noteHtml = entry.notes
+						? html`<div class="item-note-sub">📝 ${entry.notes}</div>`
+						: '';
+
+					markup += `
+						<div class="item-row ${markedClass}">
+							<div class="item-left">
+								<div class="item-info">
+									<div class="item-name-line">
+										<span class="item-name">${escapeHtml(entry.itemName)}</span>
+										${qtyHtml}
+									</div>
+									${noteHtml}
+								</div>
+							</div>
+							<button class="marked-btn" data-store="${escapeHtml(entry.store)}" data-item="${escapeHtml(entry.itemName)}">${btnText}</button>
+						</div>
+					`;
+				});
+
+				container.innerHTML = markup;
+
+				// attach back button handler
+				const back = container.querySelector('.back-btn');
+				if (back) back.addEventListener('click', () => { this.state.view = 'stores'; this.render(); });
+
+				// Attach event listeners to the marked buttons
+				container.querySelectorAll('.marked-btn').forEach(btn => {
+					const s = btn.getAttribute('data-store');
+					const it = btn.getAttribute('data-item');
+					const store = s ? decodeURIComponent(s) : '';
+					const item = it ? decodeURIComponent(it) : '';
+					btn.addEventListener('click', () => app.toggleMarked(store, item));
+				});
+			},
+
+			toggleMarked(store, item) {
+				const entry = this.data.entries.find(e => e.store === store && e.itemName === item);
+				if (entry) {
+					entry.marked = !entry.marked;
+					this.saveData();
+					this.renderShopItems();
+				}
+			},
+
+			completeShopping() {
+				if (this.state.view === 'stores') {
+					if (confirm("Remove ALL items marked Done from ALL stores?")) {
+						this.executeCompletion();
+					}
+				} else {
+					if (confirm(`Remove items marked Done from ${this.state.activeShopStore}?`)) {
+						this.executeCompletion(this.state.activeShopStore);
+					}
+				}
+			},
+
+			executeCompletion(specificStore = null) {
+				// Remove entries which were marked `marked === true` within the scope (all stores or specificStore).
+				this.data.entries = this.data.entries.filter(e => {
+					if (specificStore && e.store !== specificStore) return true;
+					return e.marked !== true; // Keep only items NOT marked Done
+				});
+
+				// Ensure any remaining items are unmarked for next session
+				this.data.entries.forEach(e => {
+					if (!specificStore || e.store === specificStore) e.marked = false;
+				});
+
+				this.saveData();
+				this.state.view = 'stores';
+				this.render();
+			}
+		};
+
+		document.addEventListener('DOMContentLoaded', () => {
+			app.init();
+		});
+
+		// Hold-to-reset: press and hold the header (h1) for 5 seconds to wipe saved app data.
+		(function() {
+			const HOLD_MS = 5000;
+			let holdTimer = null;
+			const header = document.querySelector('header h1');
+			function clearHoldTimer() {
+				if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+			}
+			function startHold(e) {
+				// Prevent accidental text selection / native behavior
+				e.preventDefault && e.preventDefault();
+				clearHoldTimer();
+				holdTimer = setTimeout(() => {
+					const ok = confirm('Wipe all saved app data? This will erase your shopping lists and history. Continue?');
+					if (ok) {
+						localStorage.removeItem(STORAGE_KEY);
+						// reset in-memory data to defaults
+						app.data = { storeHistory: ['Grocery', 'Hardware Store'], itemHistory: { 'Grocery': ['Milk', 'Bread'] }, entries: [] };
+						app.saveData();
+						app.init();
+						alert('Saved data wiped.');
+					}
+					clearHoldTimer();
+				}, HOLD_MS);
+			}
+			if (header) {
+				header.addEventListener('mousedown', startHold);
+				header.addEventListener('touchstart', startHold, { passive: false });
+				['mouseup','mouseleave','touchend','touchcancel'].forEach(ev => header.addEventListener(ev, clearHoldTimer));
+			}
+		})();
+
+	</script>
+</body>
+</html>
