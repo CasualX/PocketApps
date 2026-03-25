@@ -32,10 +32,8 @@
 			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 			background-color: var(--bg);
 			color: var(--text);
-			height: 100vh;
+			min-height: 100vh;
 			overflow: hidden;
-			display: flex;
-			flex-direction: column;
 		}
 
 		/* --- Header & Navigation --- */
@@ -92,9 +90,11 @@
 
 		/* --- Main Content Area --- */
 		#app-content {
-			flex: 1;
-			margin-top: var(--header-height);
-			margin-bottom: var(--footer-height);
+			position: fixed;
+			top: var(--header-height);
+			left: 0;
+			right: 0;
+			bottom: var(--footer-height);
 			overflow-y: auto;
 			padding: 20px;
 			-webkit-overflow-scrolling: touch;
@@ -299,7 +299,6 @@
 			align-items: center;
 			padding: 0 20px;
 			z-index: 100;
-			padding-bottom: env(safe-area-inset-bottom);
 		}
 
 		.primary-btn {
