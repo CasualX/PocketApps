@@ -916,7 +916,11 @@
 
 				mainActionLabel() {
 					if (this.saveFlash) return 'Saved!';
-					if (this.state.mode === 'shop') return 'Complete Shopping';
+					if (this.state.mode === 'shop') {
+						const count = this.currentCompletionCount();
+						if (count > 0) return `Complete ${count} Item${count === 1 ? '' : 's'}`;
+						return 'Complete Shopping';
+					}
 					if (this.draft.store && this.draft.item) {
 						return this.entryExistsExact(this.draft.store, this.draft.item) ? 'Update Item' : 'Add Item';
 					}
@@ -925,7 +929,7 @@
 
 				mainActionDisabled() {
 					if (this.saveFlash) return false;
-					if (this.state.mode === 'shop') return false;
+					if (this.state.mode === 'shop') return this.currentCompletionCount() === 0;
 					return !(this.draft.store && this.draft.item);
 				},
 
@@ -945,6 +949,21 @@
 						return;
 					}
 					this.completeShopping();
+				},
+
+				currentCompletionCount() {
+					if (this.state.mode !== 'shop') return 0;
+					if (this.state.view === 'items' && this.state.activeShopStore) {
+						return this.markedItemCount(this.state.activeShopStore);
+					}
+					return this.markedItemCount();
+				},
+
+				markedItemCount(store = null) {
+					return (this.data.entries || []).filter(entry => {
+						if (store && entry.store !== store) return false;
+						return entry.marked === true;
+					}).length;
 				},
 
 				openOverlay(type) {
