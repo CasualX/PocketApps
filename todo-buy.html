@@ -462,6 +462,79 @@
 			color: var(--success);
 			font-size: 14px;
 		}
+
+		.data-actions-copy {
+			margin: 20px 0 16px;
+			color: var(--text-secondary);
+			font-size: 14px;
+			line-height: 1.5;
+		}
+
+		.data-actions-list {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		.data-action-btn {
+			width: 100%;
+			border: 1px solid var(--border);
+			background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+			color: var(--text);
+			border-radius: 14px;
+			padding: 16px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 16px;
+			text-align: left;
+			cursor: pointer;
+			transition: border-color var(--anim-speed) ease, background var(--anim-speed) ease, transform var(--anim-speed) ease;
+		}
+
+		.data-action-btn:active {
+			transform: scale(0.985);
+		}
+
+		.data-action-btn.import {
+			background-color: rgba(10, 132, 255, 0.08);
+			border-color: rgba(10, 132, 255, 0.28);
+		}
+
+		.data-action-btn.export {
+			background-color: rgba(50, 215, 75, 0.08);
+			border-color: rgba(50, 215, 75, 0.24);
+		}
+
+		.data-action-btn.wipe {
+			background-color: rgba(255, 69, 58, 0.08);
+			border-color: rgba(255, 69, 58, 0.24);
+		}
+
+		.data-action-main {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			min-width: 0;
+		}
+
+		.data-action-title {
+			font-size: 17px;
+			font-weight: 600;
+		}
+
+		.data-action-subtitle {
+			font-size: 13px;
+			color: var(--text-secondary);
+			line-height: 1.4;
+		}
+
+		.data-action-icon {
+			font-size: 20px;
+			font-weight: 700;
+			color: var(--text-secondary);
+			flex-shrink: 0;
+		}
 	</style>
 
 	<script defer src="./alpine.min.js"></script>
@@ -695,12 +768,58 @@
 		</div>
 	</div>
 
+	<!-- Data Actions Overlay -->
+	<div id="overlay-data-actions" class="overlay" :class="{ open: activeOverlay === 'data-actions' }">
+		<div class="overlay-header">
+			<button class="close-overlay" x-on:click="closeOverlay()">Close</button>
+			<div style="flex:1; text-align:center; font-weight:600">App Data</div>
+			<div style="width:50px"></div>
+		</div>
+		<div class="data-actions-copy">
+			Import or export your Todo: Buy data, or wipe everything stored on this device.
+		</div>
+		<div class="data-actions-list">
+			<button class="data-action-btn import" x-on:click="triggerImport()">
+				<div class="data-action-main">
+					<div class="data-action-title">Import app data</div>
+					<div class="data-action-subtitle">Upload a backup and replace the current data on this device.</div>
+				</div>
+				<div class="data-action-icon">↑</div>
+			</button>
+
+			<button class="data-action-btn export" x-on:click="exportData()">
+				<div class="data-action-main">
+					<div class="data-action-title">Export app data</div>
+					<div class="data-action-subtitle">Download the current stores, items, and shopping entries.</div>
+				</div>
+				<div class="data-action-icon">↓</div>
+			</button>
+
+			<button class="data-action-btn wipe" x-on:click="confirmWipeData()">
+				<div class="data-action-main">
+					<div class="data-action-title">Wipe app data</div>
+					<div class="data-action-subtitle">Clear all saved history and shopping lists after confirmation.</div>
+				</div>
+				<div class="data-action-icon">✕</div>
+			</button>
+		</div>
+	</div>
+
+	<input
+		type="file"
+		accept=".json"
+		x-ref="importFile"
+		x-on:change="handleImport($event)"
+		style="display:none"
+	>
+
 	<script>
 		const STORAGE_KEY = 'todo_buy_data';
 
 		function todoBuyApp() {
 			return {
 				data: {
+					version: '1.0',
 					storeHistory: [],
 					itemHistory: {},
 					entries: []
@@ -729,6 +848,39 @@
 
 				holdTimer: null,
 
+				defaultData() {
+					return {
+						version: '1.0',
+						storeHistory: ['Grocery', 'Hardware Store'],
+						itemHistory: { Grocery: ['Milk', 'Bread'] },
+						entries: []
+					};
+				},
+
+				isSupportedImportVersion(version) {
+					return /^1\./.test(String(version || ''));
+				},
+
+				resetDraftAfterDataChange() {
+					if (this.draft.store && !this.data.storeHistory.includes(this.draft.store)) {
+						this.draft.store = null;
+						this.draft.item = null;
+					}
+
+					if (this.draft.store && this.draft.item) {
+						const itemList = (this.data.itemHistory && this.data.itemHistory[this.draft.store]) || [];
+						if (!itemList.includes(this.draft.item)) this.draft.item = null;
+					}
+
+					if (!this.draft.item) {
+						this.draft.qty = null;
+						this.draft.notes = '';
+					}
+
+					this.state.view = 'stores';
+					this.state.activeShopStore = null;
+				},
+
 				init() {
 					this.loadData();
 					this.state.mode = 'add';
@@ -739,14 +891,19 @@
 				loadData() {
 					const raw = localStorage.getItem(STORAGE_KEY);
 					if (raw) {
-						this.data = JSON.parse(raw);
+						try {
+							this.data = JSON.parse(raw);
+						} catch (error) {
+							this.data = this.defaultData();
+						}
 					} else {
-						this.data.storeHistory = ['Grocery', 'Hardware Store'];
-						this.data.itemHistory = { 'Grocery': ['Milk', 'Bread'] };
+						this.data = this.defaultData();
 					}
+					this.saveData();
 				},
 
 				saveData() {
+					this.data.version = '1.0';
 					localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
 				},
 
@@ -816,6 +973,66 @@
 
 				closeOverlay() {
 					this.activeOverlay = null;
+				},
+
+				openDataActions() {
+					this.activeOverlay = 'data-actions';
+				},
+
+				triggerImport() {
+					if (this.$refs.importFile) {
+						this.$refs.importFile.value = '';
+						this.$refs.importFile.click();
+					}
+				},
+
+				async handleImport(event) {
+					const file = event && event.target && event.target.files ? event.target.files[0] : null;
+					if (!file) return;
+
+					try {
+						const content = await file.text();
+						const importedData = JSON.parse(content);
+						if (!this.isSupportedImportVersion(importedData && importedData.version)) {
+							throw new Error('Unsupported version');
+						}
+						this.data = importedData;
+						this.saveData();
+						this.resetDraftAfterDataChange();
+						this.closeOverlay();
+						alert('App data imported.');
+					} catch (error) {
+						alert('Import failed. Choose a Todo: Buy file with version 1.x.');
+					} finally {
+						if (event && event.target) event.target.value = '';
+					}
+				},
+
+				exportData() {
+					const stamp = new Date().toISOString().slice(0, 10);
+					const payload = JSON.stringify(this.data, null, 2);
+					const blob = new Blob([payload], { type: 'application/json' });
+					const url = URL.createObjectURL(blob);
+					const link = document.createElement('a');
+					link.href = url;
+					link.download = `todo-buy-data-${stamp}.json`;
+					document.body.appendChild(link);
+					link.click();
+					link.remove();
+					URL.revokeObjectURL(url);
+				},
+
+				confirmWipeData() {
+					const ok = confirm('Wipe all saved app data? This will erase your shopping lists and history. Continue?');
+					if (!ok) return;
+
+					localStorage.removeItem(STORAGE_KEY);
+					this.data = this.defaultData();
+					this.saveData();
+					this.resetDraftAfterDataChange();
+					this.state.mode = 'add';
+					this.closeOverlay();
+					alert('Saved data wiped.');
 				},
 
 				filteredStores() {
@@ -1030,18 +1247,7 @@
 					if (ev && ev.preventDefault) ev.preventDefault();
 					this.clearHold();
 					this.holdTimer = setTimeout(() => {
-						const ok = confirm('Wipe all saved app data? This will erase your shopping lists and history. Continue?');
-						if (ok) {
-							localStorage.removeItem(STORAGE_KEY);
-							this.data = {
-								storeHistory: ['Grocery', 'Hardware Store'],
-								itemHistory: { 'Grocery': ['Milk', 'Bread'] },
-								entries: []
-							};
-							this.saveData();
-							this.init();
-							alert('Saved data wiped.');
-						}
+						this.openDataActions();
 						this.clearHold();
 					}, 5000);
 				},
