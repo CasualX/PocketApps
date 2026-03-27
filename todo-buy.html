@@ -1056,7 +1056,9 @@
 
 				filteredStores() {
 					const q = (this.storeQuery || '').toLowerCase();
-					return (this.data.storeHistory || []).filter(s => String(s).toLowerCase().includes(q));
+					return (this.data.storeHistory || [])
+						.filter(s => String(s).toLowerCase().includes(q))
+						.sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 				},
 
 				isStoreSelected(store) {
@@ -1092,7 +1094,9 @@
 					const store = this.draft.store;
 					const history = (this.data.itemHistory && store) ? (this.data.itemHistory[store] || []) : [];
 					const q = (this.itemQuery || '').toLowerCase();
-					return history.filter(i => String(i).toLowerCase().includes(q));
+					return history
+						.filter(i => String(i).toLowerCase().includes(q))
+						.sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 				},
 
 				isItemSelected(item) {
