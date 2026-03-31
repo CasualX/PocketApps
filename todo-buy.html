@@ -209,6 +209,12 @@ h1 {
 	cursor: default;
 }
 
+.shopping-items-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
 .item-row.marked {
 	background: var(--success-bg);
 	border-left: 4px solid var(--success);
@@ -220,7 +226,6 @@ h1 {
 .item-row.marked::before {
 	content: '✔';
 	color: var(--success);
-	margin-right: 12px;
 	font-size: 16px;
 	display: inline-block;
 	vertical-align: middle;
@@ -232,6 +237,21 @@ h1 {
 	flex: 1;
 	overflow: hidden;
 	min-width: 0;
+}
+
+.item-row {
+	gap: 12px;
+	transition: background var(--anim-speed) ease, border-color var(--anim-speed) ease, box-shadow var(--anim-speed) ease, opacity var(--anim-speed) ease, transform var(--anim-speed) ease;
+	border: 1px solid transparent;
+	position: relative;
+	user-select: none;
+	will-change: transform;
+}
+
+.item-row.drag-placeholder {
+	opacity: 0.28;
+	border-color: rgba(10, 132, 255, 0.22);
+	border-style: dashed;
 }
 
 .item-info {
@@ -286,6 +306,68 @@ h1 {
 .marked .marked-btn {
 	border-color: var(--success);
 	color: var(--success);
+}
+
+.item-row-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: 8px;
+	flex-shrink: 0;
+}
+
+.item-drag-handle {
+	width: 34px;
+	height: 34px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--text-secondary);
+	font-size: 18px;
+	line-height: 1;
+	cursor: grab;
+	touch-action: none;
+	flex-shrink: 0;
+	transition: background var(--anim-speed) ease, color var(--anim-speed) ease;
+}
+
+.item-drag-handle:active,
+.item-row.dragging .item-drag-handle {
+	cursor: grabbing;
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--text);
+}
+
+body.drag-active {
+	cursor: grabbing;
+}
+
+.drag-preview {
+	position: fixed;
+	left: 0;
+	top: 0;
+	z-index: 350;
+	pointer-events: none;
+	margin: 0;
+	opacity: 0.96;
+	border-radius: 10px;
+	border-color: rgba(10, 132, 255, 0.45);
+	box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	transition: box-shadow var(--anim-speed) ease, opacity var(--anim-speed) ease;
+}
+
+.drag-preview:not(.marked) {
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+		rgba(28, 28, 30, 0.4);
+	border-color: rgba(255, 255, 255, 0.14);
+	backdrop-filter: blur(16px) saturate(1.3);
+	-webkit-backdrop-filter: blur(16px) saturate(1.3);
 }
 
 .shopping-items-list .item-row:first-of-type {
@@ -540,7 +622,7 @@ footer {
 	<script defer src="./alpine.min.js"></script>
 </head>
 
-<body x-data="todoBuyApp()" x-init="init()" x-on:keydown.escape.window="closeOverlay()" x-cloak>
+<body x-data="todoBuyApp()" x-init="init()" x-on:keydown.escape.window="closeOverlay()" x-on:pointermove.window="handleDragMove($event)" x-on:pointerup.window="finishItemDrag($event)" x-on:pointercancel.window="finishItemDrag($event)" x-cloak>
 	<header>
 		<h1
 			x-on:mousedown.prevent="startHold()"
@@ -557,7 +639,7 @@ footer {
 		</div>
 	</header>
 
-	<main id="app-content">
+	<main id="app-content" x-ref="appContent">
 		<!-- Add Mode -->
 		<div id="view-add" x-show="state.mode === 'add'">
 			<div id="card-store" class="card selector-card" x-on:click="openOverlay('store')">
@@ -604,9 +686,9 @@ footer {
 				<span style="flex:1;" x-text="state.activeShopStore"></span>
 			</div>
 
-			<div class="list-group shopping-items-list">
+			<div class="list-group shopping-items-list" x-ref="shopItemsList">
 				<template x-for="entry in shopItemsForActiveStore()" :key="entry.store + '::' + entry.itemName">
-					<div class="list-item item-row" :class="{ marked: entry.marked }">
+					<div class="list-item item-row" :data-entry-key="entryKey(entry)" :class="{ marked: entry.marked, 'drag-placeholder': isDraggingEntry(entry) }">
 						<div class="item-left">
 							<div class="item-info">
 								<div class="item-name-line">
@@ -620,10 +702,35 @@ footer {
 								</template>
 							</div>
 						</div>
-						<button class="marked-btn" x-on:click="toggleMarked(entry.store, entry.itemName)" x-text="entry.marked ? 'Undo' : 'Done'"></button>
+						<div class="item-row-actions">
+							<button class="item-drag-handle" type="button" aria-label="Drag to reorder" x-on:pointerdown="startItemDrag($event, entry)">≡</button>
+							<button class="marked-btn" x-on:click="toggleMarked(entry.store, entry.itemName)" x-text="entry.marked ? 'Undo' : 'Done'"></button>
+						</div>
 					</div>
 				</template>
 			</div>
+
+			<template x-if="dragState.active && dragState.previewEntry">
+				<div class="list-item item-row drag-preview" :class="{ marked: dragState.previewEntry.marked }" :style="dragPreviewStyle()">
+					<div class="item-left">
+						<div class="item-info">
+							<div class="item-name-line">
+								<span class="item-name" x-text="dragState.previewEntry.itemName"></span>
+								<template x-if="dragState.previewEntry.quantity !== null && dragState.previewEntry.quantity !== ''">
+									<span class="item-qty" x-text="'x' + dragState.previewEntry.quantity"></span>
+								</template>
+							</div>
+							<template x-if="dragState.previewEntry.notes">
+								<div class="item-note-sub" x-text="'📝 ' + dragState.previewEntry.notes"></div>
+							</template>
+						</div>
+					</div>
+					<div class="item-row-actions">
+						<div class="item-drag-handle" aria-hidden="true">≡</div>
+						<button class="marked-btn" type="button" tabindex="-1" x-text="dragState.previewEntry.marked ? 'Undo' : 'Done'"></button>
+					</div>
+				</div>
+			</template>
 		</div>
 	</main>
 
@@ -845,6 +952,17 @@ function todoBuyApp() {
 		notesInput: '',
 		saveFlash: false,
 		saveFlashTimer: null,
+		dragState: {
+			active: false,
+			pointerId: null,
+			sourceKey: null,
+			moved: false,
+			previewEntry: null,
+			previewTop: 0,
+			previewLeft: 0,
+			previewWidth: 0,
+			offsetY: 0
+		},
 
 		holdTimer: null,
 
@@ -908,6 +1026,7 @@ function todoBuyApp() {
 		},
 
 		setMode(mode) {
+			this.resetItemDrag();
 			this.state.mode = mode;
 			this.state.view = 'stores';
 			this.state.activeShopStore = null;
@@ -992,6 +1111,226 @@ function todoBuyApp() {
 
 		closeOverlay() {
 			this.activeOverlay = null;
+		},
+
+		entryKey(entry) {
+			return `${entry.store}::${entry.itemName}`;
+		},
+
+		isDraggingEntry(entry) {
+			return this.dragState.active && this.dragState.sourceKey === this.entryKey(entry);
+		},
+
+		dragPreviewStyle() {
+			return {
+				top: `${this.dragState.previewTop}px`,
+				left: `${this.dragState.previewLeft}px`,
+				width: `${this.dragState.previewWidth}px`
+			};
+		},
+
+		captureStoreRowPositions() {
+			if (!this.$refs.shopItemsList) return new Map();
+
+			return new Map(
+				Array.from(this.$refs.shopItemsList.querySelectorAll('[data-entry-key]')).map(row => [
+					row.dataset.entryKey,
+					row.getBoundingClientRect().top
+				])
+			);
+		},
+
+		animateStoreReorder(previousPositions) {
+			if (!previousPositions || previousPositions.size === 0) return;
+
+			this.$nextTick(() => {
+				if (!this.$refs.shopItemsList) return;
+
+				Array.from(this.$refs.shopItemsList.querySelectorAll('[data-entry-key]')).forEach(row => {
+					const key = row.dataset.entryKey;
+					if (!key || (this.dragState.active && key === this.dragState.sourceKey)) return;
+
+					const previousTop = previousPositions.get(key);
+					if (previousTop === undefined) return;
+
+					const currentTop = row.getBoundingClientRect().top;
+					const deltaY = previousTop - currentTop;
+					if (!deltaY) return;
+
+					row.style.transition = 'none';
+					row.style.transform = `translateY(${deltaY}px)`;
+
+					requestAnimationFrame(() => {
+						row.style.transition = '';
+						row.style.transform = '';
+					});
+				});
+			});
+		},
+
+		syncDragPreviewBounds() {
+			const list = this.$refs.shopItemsList;
+			if (!list) return;
+
+			const rect = list.getBoundingClientRect();
+			this.dragState.previewLeft = rect.left;
+			this.dragState.previewWidth = rect.width;
+		},
+
+		startItemDrag(event, entry) {
+			if (this.state.mode !== 'shop' || this.state.view !== 'items' || !this.state.activeShopStore) return;
+			if (event.pointerType === 'mouse' && event.button !== 0) return;
+			const row = event.currentTarget ? event.currentTarget.closest('[data-entry-key]') : null;
+			if (!row) return;
+
+			const rowRect = row.getBoundingClientRect();
+
+			this.dragState.active = true;
+			this.dragState.pointerId = event.pointerId;
+			this.dragState.sourceKey = this.entryKey(entry);
+			this.dragState.moved = false;
+			this.dragState.previewEntry = entry;
+			this.dragState.previewTop = rowRect.top;
+			this.dragState.offsetY = event.clientY - rowRect.top;
+			this.syncDragPreviewBounds();
+
+			document.body.classList.add('drag-active');
+
+			if (event.currentTarget && event.currentTarget.setPointerCapture) {
+				try {
+					event.currentTarget.setPointerCapture(event.pointerId);
+				} catch (error) {
+				}
+			}
+
+			event.preventDefault();
+		},
+
+		handleDragMove(event) {
+			if (!this.dragState.active || event.pointerId !== this.dragState.pointerId) return;
+
+			event.preventDefault();
+			this.syncDragPreviewBounds();
+			this.dragState.previewTop = event.clientY - this.dragState.offsetY;
+			this.autoScrollShoppingList(event.clientY);
+
+			const row = this.rowFromPointer(event.clientX, event.clientY);
+			if (!row) return;
+
+			const targetKey = row.dataset.entryKey;
+			if (!targetKey || targetKey === this.dragState.sourceKey) return;
+
+			const entryKeys = this.storeEntryKeys();
+			const sourceIndex = entryKeys.indexOf(this.dragState.sourceKey);
+			const targetIndex = entryKeys.indexOf(targetKey);
+			if (sourceIndex === -1 || targetIndex === -1) return;
+
+			const insertionIndex = targetIndex > sourceIndex ? targetIndex + 1 : targetIndex;
+
+			const previousPositions = this.captureStoreRowPositions();
+			const reordered = this.reorderActiveStoreEntry(this.dragState.sourceKey, insertionIndex);
+			if (reordered) this.animateStoreReorder(previousPositions);
+		},
+
+		finishItemDrag(event) {
+			if (!this.dragState.active || event.pointerId !== this.dragState.pointerId) return;
+
+			const shouldSave = this.dragState.moved;
+			this.resetItemDrag();
+			if (shouldSave) this.saveData();
+		},
+
+		resetItemDrag() {
+			if (!this.dragState.active && this.dragState.pointerId === null && this.dragState.sourceKey === null) return;
+
+			this.dragState.active = false;
+			this.dragState.pointerId = null;
+			this.dragState.sourceKey = null;
+			this.dragState.moved = false;
+			this.dragState.previewEntry = null;
+			this.dragState.previewTop = 0;
+			this.dragState.previewLeft = 0;
+			this.dragState.previewWidth = 0;
+			this.dragState.offsetY = 0;
+			document.body.classList.remove('drag-active');
+		},
+
+		rowFromPointer(clientX, clientY) {
+			const list = this.$refs.shopItemsList;
+			if (!list) return null;
+
+			const rect = list.getBoundingClientRect();
+			if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+
+			const styles = getComputedStyle(list);
+			const gap = parseFloat(styles.rowGap || styles.gap || '0') || 0;
+			const pointerY = clientY - rect.top;
+			let cursorY = 0;
+
+			for (const row of list.querySelectorAll('[data-entry-key]')) {
+				const rowTop = cursorY;
+				const rowBottom = rowTop + row.offsetHeight;
+
+				if (pointerY >= rowTop && pointerY <= rowBottom) return row;
+
+				cursorY = rowBottom + gap;
+			}
+
+			return null;
+		},
+
+		storeEntryKeys() {
+			return this.shopItemsForActiveStore().map(entry => this.entryKey(entry));
+		},
+
+		autoScrollShoppingList(clientY) {
+			const container = this.$refs.appContent;
+			if (!container) return;
+
+			const rect = container.getBoundingClientRect();
+			const maxScrollTop = container.scrollHeight - container.clientHeight;
+			if (maxScrollTop <= 0) return;
+
+			const edge = 56;
+			const step = 14;
+
+			if (clientY < rect.top + edge) {
+				container.scrollTop = Math.max(0, container.scrollTop - step);
+			} else if (clientY > rect.bottom - edge) {
+				container.scrollTop = Math.min(maxScrollTop, container.scrollTop + step);
+			}
+		},
+
+		reorderActiveStoreEntry(sourceKey, targetIndex) {
+			const store = this.state.activeShopStore;
+			if (!store) return false;
+
+			const storeEntries = this.data.entries.filter(entry => entry.store === store);
+			const sourceIndex = storeEntries.findIndex(entry => this.entryKey(entry) === sourceKey);
+			if (sourceIndex === -1) return false;
+
+			const boundedTargetIndex = Math.max(0, Math.min(targetIndex, storeEntries.length));
+			let nextIndex = boundedTargetIndex;
+			if (sourceIndex < nextIndex) nextIndex -= 1;
+
+			if (sourceIndex === nextIndex) return false;
+
+			const reorderedStoreEntries = storeEntries.slice();
+			const movedEntries = reorderedStoreEntries.splice(sourceIndex, 1);
+			if (movedEntries.length === 0) return false;
+
+			reorderedStoreEntries.splice(nextIndex, 0, movedEntries[0]);
+
+			let storeCursor = 0;
+			this.data.entries = this.data.entries.map(entry => {
+				if (entry.store !== store) return entry;
+				const replacement = reorderedStoreEntries[storeCursor];
+				storeCursor += 1;
+				return replacement;
+			});
+
+			this.dragState.moved = true;
+			return true;
 		},
 
 		openDataActions() {
@@ -1225,6 +1564,7 @@ function todoBuyApp() {
 		},
 
 		openShopStore(store) {
+			this.resetItemDrag();
 			this.state.view = 'items';
 			this.state.activeShopStore = store;
 		},
@@ -1252,6 +1592,7 @@ function todoBuyApp() {
 		},
 
 		executeCompletion(specificStore = null) {
+			this.resetItemDrag();
 			this.data.entries = this.data.entries.filter(e => {
 				if (specificStore && e.store !== specificStore) return true;
 				return e.marked !== true;
