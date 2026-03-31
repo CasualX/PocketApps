@@ -960,7 +960,7 @@
 				},
 
 				markedItemCount(store = null) {
-					return (this.data.entries || []).filter(entry => {
+					return this.data.entries.filter(entry => {
 						if (store && entry.store !== store) return false;
 						return entry.marked === true;
 					}).length;
@@ -985,7 +985,7 @@
 						this.$nextTick(() => this.$refs.inputQty && this.$refs.inputQty.focus());
 					}
 					if (type === 'notes') {
-						this.notesInput = this.draft.notes || '';
+						this.notesInput = this.draft.notes;
 						this.$nextTick(() => this.$refs.inputNotes && this.$refs.inputNotes.focus());
 					}
 				},
@@ -1055,8 +1055,8 @@
 				},
 
 				filteredStores() {
-					const q = (this.storeQuery || '').toLowerCase();
-					return (this.data.storeHistory || [])
+					const q = this.storeQuery.toLowerCase();
+					return this.data.storeHistory
 						.filter(s => String(s).toLowerCase().includes(q))
 						.sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
 				},
@@ -1066,12 +1066,12 @@
 				},
 
 				previewStore(name) {
-					this.storeQuery = name || '';
+					this.storeQuery = name;
 					this.$nextTick(() => this.$refs.inputStore && this.$refs.inputStore.focus());
 				},
 
 				selectStore(name) {
-					name = (name || '').trim();
+					name = name.trim();
 					if (!name) return;
 					if (this.draft.store !== name) this.draft.item = null;
 					this.draft.store = name;
@@ -1084,7 +1084,7 @@
 
 				deleteStore(name) {
 					if (confirm(`Delete "${name}" from history?`)) {
-						this.data.storeHistory = (this.data.storeHistory || []).filter(s => s !== name);
+						this.data.storeHistory = this.data.storeHistory.filter(s => s !== name);
 						if (this.data.itemHistory) delete this.data.itemHistory[name];
 						this.saveData();
 					}
@@ -1093,7 +1093,7 @@
 				filteredItems() {
 					const store = this.draft.store;
 					const history = (this.data.itemHistory && store) ? (this.data.itemHistory[store] || []) : [];
-					const q = (this.itemQuery || '').toLowerCase();
+					const q = this.itemQuery.toLowerCase();
 					return history
 						.filter(i => String(i).toLowerCase().includes(q))
 						.sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
@@ -1104,27 +1104,27 @@
 				},
 
 				previewItem(name) {
-					this.itemQuery = name || '';
+					this.itemQuery = name;
 					this.$nextTick(() => this.$refs.inputItem && this.$refs.inputItem.focus());
 				},
 
 				isItemPresentForStore(store, itemName) {
 					if (!store || !itemName) return false;
 					const needle = String(itemName).toLowerCase();
-					return (this.data.entries || []).some(e => e.store === store && String(e.itemName).toLowerCase() === needle);
+					return this.data.entries.some(e => e.store === store && String(e.itemName).toLowerCase() === needle);
 				},
 
 				isItemPresentExact(store, itemName) {
 					if (!store || !itemName) return false;
-					return (this.data.entries || []).some(e => e.store === store && e.itemName === itemName);
+					return this.data.entries.some(e => e.store === store && e.itemName === itemName);
 				},
 
 				entryExistsExact(store, itemName) {
-					return (this.data.entries || []).some(e => e.store === store && e.itemName === itemName);
+					return this.data.entries.some(e => e.store === store && e.itemName === itemName);
 				},
 
 				selectItem(name) {
-					name = (name || '').trim();
+					name = name.trim();
 					if (!name) return;
 					if (!this.draft.store) return;
 
@@ -1140,10 +1140,10 @@
 
 					this.closeOverlay();
 
-					const existing = (this.data.entries || []).find(e => e.store === this.draft.store && e.itemName === name);
+					const existing = this.data.entries.find(e => e.store === this.draft.store && e.itemName === name);
 					if (existing) {
 						this.draft.qty = existing.quantity;
-						this.draft.notes = existing.notes;
+						this.draft.notes = existing.notes || '';
 					} else {
 						this.draft.qty = null;
 						this.draft.notes = '';
@@ -1151,7 +1151,7 @@
 				},
 
 				deleteItem(name) {
-					name = (name || '').trim();
+					name = name.trim();
 					if (!name) return;
 					const s = this.draft.store;
 					if (!s) return;
@@ -1161,17 +1161,16 @@
 				},
 
 				confirmQuantity() {
-					const val = (this.qtyInput ?? '').toString();
-					if (val === '') {
+					if (this.qtyInput === '') {
 						this.draft.qty = null;
 					} else {
-						this.draft.qty = parseInt(val);
+						this.draft.qty = parseInt(this.qtyInput);
 					}
 					this.closeOverlay();
 				},
 
 				confirmNotes() {
-					this.draft.notes = (this.notesInput || '').trim();
+					this.draft.notes = this.notesInput.trim();
 					this.closeOverlay();
 				},
 
@@ -1185,7 +1184,7 @@
 						this.data.itemHistory[this.draft.store].push(this.draft.item);
 					}
 
-					const idx = (this.data.entries || []).findIndex(e => e.store === this.draft.store && e.itemName === this.draft.item);
+					const idx = this.data.entries.findIndex(e => e.store === this.draft.store && e.itemName === this.draft.item);
 					const newEntry = {
 						store: this.draft.store,
 						itemName: this.draft.item,
@@ -1216,13 +1215,13 @@
 				},
 
 				shopStores() {
-					const stores = [...new Set((this.data.entries || []).map(e => e.store))];
+					const stores = [...new Set(this.data.entries.map(e => e.store))];
 					stores.sort((a, b) => this.storeItemCount(b) - this.storeItemCount(a));
 					return stores;
 				},
 
 				storeItemCount(store) {
-					return (this.data.entries || []).filter(e => e.store === store).length;
+					return this.data.entries.filter(e => e.store === store).length;
 				},
 
 				openShopStore(store) {
@@ -1232,11 +1231,11 @@
 
 				shopItemsForActiveStore() {
 					const store = this.state.activeShopStore;
-					return (this.data.entries || []).filter(e => e.store === store);
+					return this.data.entries.filter(e => e.store === store);
 				},
 
 				toggleMarked(store, item) {
-					const entry = (this.data.entries || []).find(e => e.store === store && e.itemName === item);
+					const entry = this.data.entries.find(e => e.store === store && e.itemName === item);
 					if (!entry) return;
 					entry.marked = !entry.marked;
 					this.saveData();
@@ -1253,17 +1252,21 @@
 				},
 
 				executeCompletion(specificStore = null) {
-					this.data.entries = (this.data.entries || []).filter(e => {
+					this.data.entries = this.data.entries.filter(e => {
 						if (specificStore && e.store !== specificStore) return true;
 						return e.marked !== true;
 					});
 
-					(this.data.entries || []).forEach(e => {
+					this.data.entries.forEach(e => {
 						if (!specificStore || e.store === specificStore) e.marked = false;
 					});
 
 					this.saveData();
-					this.state.view = 'stores';
+
+					const hasRemainingItems = this.data.entries.some(e => e.store === specificStore);
+					if (!hasRemainingItems) {
+						this.state.view = 'stores';
+					}
 				},
 
 				startHold(ev) {
