@@ -22,6 +22,8 @@
 	--anim-speed: 0.25s;
 	--success: #32D74B;
 	--success-bg: rgba(50,215,75,0.08);
+	--success-preview-surface: rgba(10, 30, 12, 0.82);
+	--edge-fade-width: 24px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -233,10 +235,14 @@ h1 {
 
 .item-left {
 	display: flex;
-	align-items: center;
-	flex: 1;
-	overflow: hidden;
+	flex-direction: column;
+	justify-content: center;
+	align-items: stretch;
+	flex: 1 1 auto;
 	min-width: 0;
+	margin-right: -90px;
+	padding-right: 54px;
+	overflow: hidden;
 }
 
 .item-row {
@@ -254,24 +260,34 @@ h1 {
 	border-style: dashed;
 }
 
-.item-info {
-	display: flex;
-	flex-direction: column;
-	overflow: hidden;
-}
-
 .item-name-line {
 	display: flex;
 	align-items: baseline;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	min-width: 0;
+	width: 100%;
 }
 
 .item-name {
+	display: block;
+	flex: 1 1 auto;
 	font-size: 17px;
 	font-weight: 500;
 	margin-right: 8px;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	-webkit-mask-image: linear-gradient(
+		to right,
+		#000 0,
+		#000 calc(100% - var(--edge-fade-width)),
+		transparent
+	);
+	mask-image: linear-gradient(
+		to right,
+		#000 0,
+		#000 calc(100% - var(--edge-fade-width)),
+		transparent
+	);
 }
 
 .item-qty {
@@ -281,15 +297,29 @@ h1 {
 	background: var(--primary-bg);
 	padding: 2px 6px;
 	border-radius: 4px;
+	flex-shrink: 0;
 }
 
 .item-note-sub {
+	display: block;
 	font-size: 13px;
 	color: var(--text-secondary);
 	margin-top: 2px;
+	width: 100%;
 	white-space: nowrap;
 	overflow: hidden;
-	text-overflow: ellipsis;
+	-webkit-mask-image: linear-gradient(
+		to right,
+		#000 0,
+		#000 calc(100% - var(--edge-fade-width)),
+		transparent
+	);
+	mask-image: linear-gradient(
+		to right,
+		#000 0,
+		#000 calc(100% - var(--edge-fade-width)),
+		transparent
+	);
 }
 
 .marked-btn {
@@ -299,7 +329,6 @@ h1 {
 	padding: 6px 12px;
 	border-radius: 6px;
 	font-size: 13px;
-	margin-left: 10px;
 	cursor: pointer;
 }
 
@@ -368,6 +397,15 @@ body.drag-active {
 	border-color: rgba(255, 255, 255, 0.14);
 	backdrop-filter: blur(16px) saturate(1.3);
 	-webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
+
+.drag-preview.marked {
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+		var(--success-preview-surface);
+	border-color: rgba(50, 215, 75, 0.2);
+	backdrop-filter: blur(16px) saturate(1.2);
+	-webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .shopping-items-list .item-row:first-of-type {
@@ -690,17 +728,15 @@ footer {
 				<template x-for="entry in shopItemsForActiveStore()" :key="entry.store + '::' + entry.itemName">
 					<div class="list-item item-row" :data-entry-key="entryKey(entry)" :class="{ marked: entry.marked, 'drag-placeholder': isDraggingEntry(entry) }">
 						<div class="item-left">
-							<div class="item-info">
-								<div class="item-name-line">
-									<span class="item-name" x-text="entry.itemName"></span>
-									<template x-if="entry.quantity !== null && entry.quantity !== ''">
-										<span class="item-qty" x-text="'x' + entry.quantity"></span>
-									</template>
-								</div>
-								<template x-if="entry.notes">
-									<div class="item-note-sub" x-text="'📝 ' + entry.notes"></div>
+							<div class="item-name-line">
+								<span class="item-name" x-text="entry.itemName"></span>
+								<template x-if="entry.quantity !== null && entry.quantity !== ''">
+									<span class="item-qty" x-text="'x' + entry.quantity"></span>
 								</template>
 							</div>
+							<template x-if="entry.notes">
+								<div class="item-note-sub" x-text="'📝 ' + entry.notes"></div>
+							</template>
 						</div>
 						<div class="item-row-actions">
 							<button class="item-drag-handle" type="button" aria-label="Drag to reorder" x-on:pointerdown="startItemDrag($event, entry)">≡</button>
@@ -713,17 +749,15 @@ footer {
 			<template x-if="dragState.active && dragState.previewEntry">
 				<div class="list-item item-row drag-preview" :class="{ marked: dragState.previewEntry.marked }" :style="dragPreviewStyle()">
 					<div class="item-left">
-						<div class="item-info">
-							<div class="item-name-line">
-								<span class="item-name" x-text="dragState.previewEntry.itemName"></span>
-								<template x-if="dragState.previewEntry.quantity !== null && dragState.previewEntry.quantity !== ''">
-									<span class="item-qty" x-text="'x' + dragState.previewEntry.quantity"></span>
-								</template>
-							</div>
-							<template x-if="dragState.previewEntry.notes">
-								<div class="item-note-sub" x-text="'📝 ' + dragState.previewEntry.notes"></div>
+						<div class="item-name-line">
+							<span class="item-name" x-text="dragState.previewEntry.itemName"></span>
+							<template x-if="dragState.previewEntry.quantity !== null && dragState.previewEntry.quantity !== ''">
+								<span class="item-qty" x-text="'x' + dragState.previewEntry.quantity"></span>
 							</template>
 						</div>
+						<template x-if="dragState.previewEntry.notes">
+							<div class="item-note-sub" x-text="'📝 ' + dragState.previewEntry.notes"></div>
+						</template>
 					</div>
 					<div class="item-row-actions">
 						<div class="item-drag-handle" aria-hidden="true">≡</div>
