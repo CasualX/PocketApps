@@ -566,7 +566,12 @@ footer {
 .delete-icon {
 	color: var(--text-secondary);
 }
-.delete-icon:hover { color: var(--danger); }
+.delete-icon:not(.disabled):hover { color: var(--danger); }
+
+.delete-icon.disabled {
+	opacity: 0.25;
+	color: var(--text-secondary);
+}
 
 .list-item.present {
 	background: rgba(123, 189, 255, 0.12);
@@ -735,7 +740,7 @@ footer {
 								</template>
 							</div>
 							<template x-if="entry.notes">
-								<div class="item-note-sub" x-text="'📝 ' + entry.notes"></div>
+								<div class="item-note-sub" x-text="entry.notes"></div>
 							</template>
 						</div>
 						<div class="item-row-actions">
@@ -756,7 +761,7 @@ footer {
 							</template>
 						</div>
 						<template x-if="dragState.previewEntry.notes">
-							<div class="item-note-sub" x-text="'📝 ' + dragState.previewEntry.notes"></div>
+							<div class="item-note-sub" x-text="dragState.previewEntry.notes"></div>
 						</template>
 					</div>
 					<div class="item-row-actions">
@@ -817,7 +822,7 @@ footer {
 					x-on:contextmenu.prevent="previewStore(store)"
 				>
 					<span x-text="store"></span>
-					<span class="delete-icon" x-on:click.stop="deleteStore(store)">✕</span>
+					<span class="delete-icon" :class="{ disabled: !canDeleteStore(store) }" x-on:click.stop="deleteStore(store)">✕</span>
 				</div>
 			</template>
 		</div>
@@ -861,7 +866,7 @@ footer {
 					x-on:dblclick.prevent="previewItem(item)"
 				>
 					<span x-text="item"></span>
-					<span class="delete-icon" x-on:click.stop="deleteItem(item)">✕</span>
+					<span class="delete-icon" :class="{ disabled: !canDeleteItem(item) }" x-on:click.stop="deleteItem(item)">✕</span>
 				</div>
 			</template>
 		</div>
@@ -1438,6 +1443,15 @@ function todoBuyApp() {
 			return !!this.draft.store && String(this.draft.store).toLowerCase() === String(store).toLowerCase();
 		},
 
+		isStorePresent(store) {
+			if (!store) return false;
+			return this.data.entries.some(entry => entry.store === store);
+		},
+
+		canDeleteStore(store) {
+			return !this.isStoreSelected(store) && !this.isStorePresent(store);
+		},
+
 		previewStore(name) {
 			this.storeQuery = name;
 			this.$nextTick(() => this.$refs.inputStore && this.$refs.inputStore.focus());
@@ -1456,6 +1470,7 @@ function todoBuyApp() {
 		},
 
 		deleteStore(name) {
+			if (!this.canDeleteStore(name)) return;
 			if (confirm(`Delete "${name}" from history?`)) {
 				this.data.storeHistory = this.data.storeHistory.filter(s => s !== name);
 				if (this.data.itemHistory) delete this.data.itemHistory[name];
@@ -1474,6 +1489,11 @@ function todoBuyApp() {
 
 		isItemSelected(item) {
 			return !!this.draft.item && String(this.draft.item).toLowerCase() === String(item).toLowerCase();
+		},
+
+		canDeleteItem(item) {
+			if (!this.draft.store || !item) return false;
+			return !this.isItemSelected(item) && !this.isItemPresentExact(this.draft.store, item);
 		},
 
 		previewItem(name) {
@@ -1528,6 +1548,7 @@ function todoBuyApp() {
 			if (!name) return;
 			const s = this.draft.store;
 			if (!s) return;
+			if (!this.canDeleteItem(name)) return;
 			if (!this.data.itemHistory[s]) this.data.itemHistory[s] = [];
 			this.data.itemHistory[s] = this.data.itemHistory[s].filter(i => i !== name);
 			this.saveData();
