@@ -268,7 +268,7 @@ h1 {
 }
 
 .item-row.drag-placeholder {
-	opacity: 0.28;
+	opacity: 0.05;
 	border-color: rgba(10, 132, 255, 0.22);
 	border-style: dashed;
 }
@@ -383,8 +383,9 @@ h1 {
 	color: var(--text);
 }
 
-body.drag-active {
-	cursor: grabbing;
+body.drag-active,
+body.drag-active * {
+	cursor: grabbing !important;
 }
 
 .drag-preview {
@@ -1010,6 +1011,8 @@ function todoBuyApp() {
 		notesInput: '',
 		saveFlash: false,
 		saveFlashTimer: null,
+		reorderAnimationFrame: null,
+		pendingReorderPositions: new Map(),
 		dragState: {
 			active: false,
 			pointerId: null,
@@ -1200,31 +1203,60 @@ function todoBuyApp() {
 			);
 		},
 
-		animateStoreReorder(previousPositions) {
+		queueStoreReorderAnimation(previousPositions) {
 			if (!previousPositions || previousPositions.size === 0) return;
 
-			this.$nextTick(() => {
-				if (!this.$refs.shopItemsList) return;
+			previousPositions.forEach((top, key) => {
+				this.pendingReorderPositions.set(key, top);
+			});
 
-				Array.from(this.$refs.shopItemsList.querySelectorAll('[data-entry-key]')).forEach(row => {
-					const key = row.dataset.entryKey;
-					if (!key || (this.dragState.active && key === this.dragState.sourceKey)) return;
+			if (this.reorderAnimationFrame !== null) return;
 
-					const previousTop = previousPositions.get(key);
-					if (previousTop === undefined) return;
+			this.reorderAnimationFrame = requestAnimationFrame(() => {
+				this.reorderAnimationFrame = null;
+				const pendingPositions = this.pendingReorderPositions;
+				this.pendingReorderPositions = new Map();
+				this.animateStoreReorder(pendingPositions);
+			});
+		},
 
-					const currentTop = row.getBoundingClientRect().top;
-					const deltaY = previousTop - currentTop;
-					if (!deltaY) return;
+		currentRowTranslateY(row) {
+			const transform = getComputedStyle(row).transform;
+			if (!transform || transform === 'none') return 0;
 
-					row.style.transition = 'none';
-					row.style.transform = `translateY(${deltaY}px)`;
+			const matrixMatch = transform.match(/matrix\(([^)]+)\)/);
+			if (matrixMatch) {
+				const values = matrixMatch[1].split(',').map(value => parseFloat(value.trim()));
+				return Number.isFinite(values[5]) ? values[5] : 0;
+			}
 
-					requestAnimationFrame(() => {
-						row.style.transition = '';
-						row.style.transform = '';
-					});
-				});
+			const matrix3dMatch = transform.match(/matrix3d\(([^)]+)\)/);
+			if (matrix3dMatch) {
+				const values = matrix3dMatch[1].split(',').map(value => parseFloat(value.trim()));
+				return Number.isFinite(values[13]) ? values[13] : 0;
+			}
+
+			return 0;
+		},
+
+		animateStoreReorder(previousPositions) {
+			if (!previousPositions || previousPositions.size === 0 || !this.$refs.shopItemsList) return;
+
+			Array.from(this.$refs.shopItemsList.querySelectorAll('[data-entry-key]')).forEach(row => {
+				const key = row.dataset.entryKey;
+				if (!key || (this.dragState.active && key === this.dragState.sourceKey)) return;
+
+				const previousTop = previousPositions.get(key);
+				if (previousTop === undefined) return;
+
+				const currentTop = row.getBoundingClientRect().top;
+				const nextTranslateY = this.currentRowTranslateY(row) + (previousTop - currentTop);
+
+				row.style.transition = 'none';
+				row.style.transform = Math.abs(nextTranslateY) < 0.5 ? 'translateY(0px)' : `translateY(${nextTranslateY}px)`;
+				row.getBoundingClientRect();
+				row.style.transition = '';
+				row.style.transform = 'translateY(0px)';
 			});
 		},
 
@@ -1290,7 +1322,7 @@ function todoBuyApp() {
 
 			const previousPositions = this.captureStoreRowPositions();
 			const reordered = this.reorderActiveStoreEntry(this.dragState.sourceKey, insertionIndex);
-			if (reordered) this.animateStoreReorder(previousPositions);
+			if (reordered) this.queueStoreReorderAnimation(previousPositions);
 		},
 
 		finishItemDrag(event) {
