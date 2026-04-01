@@ -26,8 +26,13 @@
 	--edge-fade-width: 24px;
 }
 
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-[x-cloak] { display: none !important; }
+* {
+	box-sizing: border-box;
+	-webkit-tap-highlight-color: transparent;
+}
+[x-cloak] {
+	display: none !important;
+}
 
 body {
 	margin: 0;
@@ -102,7 +107,9 @@ h1 {
 	-webkit-overflow-scrolling: touch;
 }
 
-.hidden { display: none !important; }
+.hidden {
+	display: none !important;
+}
 
 /* --- Cards & Selectors --- */
 .card {
@@ -127,8 +134,12 @@ h1 {
 	pointer-events: none;
 }
 
-.selector-card.disabled::after { opacity: 0.35; }
-.selector-card.disabled .value { color: var(--text-secondary); }
+.selector-card.disabled::after {
+	opacity: 0.35;
+}
+.selector-card.disabled .value {
+	color: var(--text-secondary);
+}
 
 .selector-card::after {
 	content: '›';
@@ -155,7 +166,9 @@ h1 {
 	min-height: 24px;
 }
 
-.value.placeholder { color: var(--text-secondary); opacity: 0.5; }
+.value.placeholder {
+	color: var(--text-secondary); opacity: 0.5;
+}
 
 /* --- Shopping List Styles --- */
 
@@ -446,7 +459,9 @@ footer {
 	transition: background var(--anim-speed) ease, color var(--anim-speed) ease, opacity var(--anim-speed) ease;
 }
 
-.primary-btn:active { opacity: 0.8; }
+.primary-btn:active {
+	opacity: 0.8;
+}
 
 .primary-btn.disabled,
 .primary-btn:disabled {
@@ -471,7 +486,9 @@ footer {
 	flex-direction: column;
 }
 
-.overlay.open { transform: translateY(0); }
+.overlay.open {
+	transform: translateY(0);
+}
 
 .overlay-header {
 	position: absolute;
@@ -566,7 +583,9 @@ footer {
 .delete-icon {
 	color: var(--text-secondary);
 }
-.delete-icon:not(.disabled):hover { color: var(--danger); }
+.delete-icon:not(.disabled):hover {
+	color: var(--danger);
+}
 
 .delete-icon.disabled {
 	opacity: 0.25;
@@ -1050,10 +1069,12 @@ function todoBuyApp() {
 			if (raw) {
 				try {
 					this.data = JSON.parse(raw);
-				} catch (error) {
+				}
+				catch (error) {
 					this.data = this.defaultData();
 				}
-			} else {
+			}
+			else {
 				this.data = this.defaultData();
 			}
 			this.saveData();
@@ -1238,7 +1259,8 @@ function todoBuyApp() {
 			if (event.currentTarget && event.currentTarget.setPointerCapture) {
 				try {
 					event.currentTarget.setPointerCapture(event.pointerId);
-				} catch (error) {
+				}
+				catch (error) {
 				}
 			}
 
@@ -1335,7 +1357,8 @@ function todoBuyApp() {
 
 			if (clientY < rect.top + edge) {
 				container.scrollTop = Math.max(0, container.scrollTop - step);
-			} else if (clientY > rect.bottom - edge) {
+			}
+			else if (clientY > rect.bottom - edge) {
 				container.scrollTop = Math.min(maxScrollTop, container.scrollTop + step);
 			}
 		},
@@ -1398,9 +1421,11 @@ function todoBuyApp() {
 				this.resetDraftAfterDataChange();
 				this.closeOverlay();
 				alert('App data imported.');
-			} catch (error) {
+			}
+			catch (error) {
 				alert('Import failed. Choose a Todo: Buy file with version 1.x.');
-			} finally {
+			}
+			finally {
 				if (event && event.target) event.target.value = '';
 			}
 		},
@@ -1537,7 +1562,8 @@ function todoBuyApp() {
 			if (existing) {
 				this.draft.qty = existing.quantity;
 				this.draft.notes = existing.notes || '';
-			} else {
+			}
+			else {
 				this.draft.qty = null;
 				this.draft.notes = '';
 			}
@@ -1557,7 +1583,8 @@ function todoBuyApp() {
 		confirmQuantity() {
 			if (this.qtyInput === '') {
 				this.draft.qty = null;
-			} else {
+			}
+			else {
 				this.draft.qty = parseInt(this.qtyInput);
 			}
 			this.closeOverlay();
@@ -1589,7 +1616,8 @@ function todoBuyApp() {
 
 			if (idx > -1) {
 				this.data.entries[idx] = newEntry;
-			} else {
+			}
+			else {
 				this.data.entries.push(newEntry);
 			}
 
