@@ -1650,7 +1650,7 @@ function todoBuyApp() {
 				this.data.entries[idx] = newEntry;
 			}
 			else {
-				this.data.entries.push(newEntry);
+				this.data.entries.unshift(newEntry);
 			}
 
 			this.saveData();
