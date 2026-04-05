@@ -828,7 +828,6 @@ footer {
 				<div
 					class="list-item"
 					x-on:click="selectStore(storeQuery)"
-					x-on:contextmenu.prevent="previewStore(storeQuery)"
 				>
 					<div>Use: <b x-text="storeQuery"></b></div>
 				</div>
@@ -839,7 +838,7 @@ footer {
 					class="list-item"
 					:class="{ selected: isStoreSelected(store) }"
 					x-on:click="selectStore(store)"
-					x-on:contextmenu.prevent="previewStore(store)"
+					x-on:contextmenu.prevent="promptRenameStore(store)"
 				>
 					<span x-text="store"></span>
 					<span class="delete-icon" :class="{ disabled: !canDeleteStore(store) }" x-on:click.stop="deleteStore(store)">✕</span>
@@ -872,7 +871,6 @@ footer {
 					class="list-item"
 					:class="{ present: isItemPresentForStore(draft.store, itemQuery) }"
 					x-on:click="selectItem(itemQuery)"
-					x-on:dblclick.prevent="previewItem(itemQuery)"
 				>
 					<div>Use: <b x-text="itemQuery"></b></div>
 				</div>
@@ -883,7 +881,7 @@ footer {
 					class="list-item"
 					:class="{ present: isItemPresentExact(draft.store, item), selected: isItemSelected(item) }"
 					x-on:click="selectItem(item)"
-					x-on:dblclick.prevent="previewItem(item)"
+					x-on:contextmenu.prevent="promptRenameItem(item)"
 				>
 					<span x-text="item"></span>
 					<span class="delete-icon" :class="{ disabled: !canDeleteItem(item) }" x-on:click.stop="deleteItem(item)">✕</span>
@@ -1174,6 +1172,133 @@ function todoBuyApp() {
 
 		closeOverlay() {
 			this.activeOverlay = null;
+		},
+
+		promptRenameStore(name) {
+			const nextName = prompt('Rename store', name);
+			if (nextName === null) return;
+
+			const trimmedName = nextName.trim();
+			if (!trimmedName) {
+				alert('Store name cannot be empty.');
+				return;
+			}
+
+			if (trimmedName === name) return;
+
+			this.renameStore(name, trimmedName);
+			this.saveData();
+		},
+
+		promptRenameItem(name) {
+			const nextName = prompt('Rename item', name);
+			if (nextName === null) return;
+
+			const trimmedName = nextName.trim();
+			if (!trimmedName) {
+				alert('Item name cannot be empty.');
+				return;
+			}
+
+			if (trimmedName === name) return;
+
+			this.renameItem(this.draft.store, name, trimmedName);
+			this.saveData();
+		},
+
+		mergeEntryData(primaryEntry, incomingEntry) {
+			return {
+				...primaryEntry,
+				quantity: (primaryEntry.quantity === null || primaryEntry.quantity === '') && incomingEntry.quantity !== null && incomingEntry.quantity !== ''
+					? incomingEntry.quantity
+					: primaryEntry.quantity,
+				notes: primaryEntry.notes || incomingEntry.notes || '',
+				marked: primaryEntry.marked === true || incomingEntry.marked === true
+			};
+		},
+
+		dedupeEntriesForStore(store) {
+			const mergedEntries = [];
+			const indexesByItem = new Map();
+
+			this.data.entries.forEach(entry => {
+				if (entry.store !== store) {
+					mergedEntries.push(entry);
+					return;
+				}
+
+				const existingIndex = indexesByItem.get(entry.itemName);
+				if (existingIndex === undefined) {
+					indexesByItem.set(entry.itemName, mergedEntries.length);
+					mergedEntries.push(entry);
+					return;
+				}
+
+				mergedEntries[existingIndex] = this.mergeEntryData(mergedEntries[existingIndex], entry);
+			});
+
+			this.data.entries = mergedEntries;
+		},
+
+		renameStore(oldName, newName) {
+			const nextStoreHistory = [];
+			let replaced = false;
+
+			this.data.storeHistory.forEach(storeName => {
+				if (storeName === oldName) {
+					if (!nextStoreHistory.includes(newName)) nextStoreHistory.push(newName);
+					replaced = true;
+					return;
+				}
+
+				if (storeName !== newName) nextStoreHistory.push(storeName);
+			});
+
+			if (!replaced && !nextStoreHistory.includes(newName)) nextStoreHistory.push(newName);
+			this.data.storeHistory = nextStoreHistory;
+
+			const previousItems = (this.data.itemHistory && this.data.itemHistory[oldName]) || [];
+			const existingItems = (this.data.itemHistory && this.data.itemHistory[newName]) || [];
+			this.data.itemHistory[newName] = [...new Set([...existingItems, ...previousItems])];
+			if (oldName !== newName) delete this.data.itemHistory[oldName];
+
+			this.data.entries = this.data.entries.map(entry => {
+				if (entry.store !== oldName) return entry;
+				return { ...entry, store: newName };
+			});
+			this.dedupeEntriesForStore(newName);
+
+			if (this.draft.store === oldName) this.draft.store = newName;
+			if (this.state.activeShopStore === oldName) this.state.activeShopStore = newName;
+		},
+
+		renameItem(store, oldName, newName) {
+			if (!store) return;
+
+			const itemHistory = this.data.itemHistory[store] || [];
+			const nextItemHistory = [];
+			let replaced = false;
+
+			itemHistory.forEach(itemName => {
+				if (itemName === oldName) {
+					if (!nextItemHistory.includes(newName)) nextItemHistory.push(newName);
+					replaced = true;
+					return;
+				}
+
+				if (itemName !== newName) nextItemHistory.push(itemName);
+			});
+
+			if (!replaced && !nextItemHistory.includes(newName)) nextItemHistory.push(newName);
+			this.data.itemHistory[store] = nextItemHistory;
+
+			this.data.entries = this.data.entries.map(entry => {
+				if (entry.store !== store || entry.itemName !== oldName) return entry;
+				return { ...entry, itemName: newName };
+			});
+			this.dedupeEntriesForStore(store);
+
+			if (this.draft.store === store && this.draft.item === oldName) this.draft.item = newName;
 		},
 
 		entryKey(entry) {
@@ -1509,11 +1634,6 @@ function todoBuyApp() {
 			return !this.isStoreSelected(store) && !this.isStorePresent(store);
 		},
 
-		previewStore(name) {
-			this.storeQuery = name;
-			this.$nextTick(() => this.$refs.inputStore && this.$refs.inputStore.focus());
-		},
-
 		selectStore(name) {
 			name = name.trim();
 			if (!name) return;
@@ -1551,11 +1671,6 @@ function todoBuyApp() {
 		canDeleteItem(item) {
 			if (!this.draft.store || !item) return false;
 			return !this.isItemSelected(item) && !this.isItemPresentExact(this.draft.store, item);
-		},
-
-		previewItem(name) {
-			this.itemQuery = name;
-			this.$nextTick(() => this.$refs.inputItem && this.$refs.inputItem.focus());
 		},
 
 		isItemPresentForStore(store, itemName) {
