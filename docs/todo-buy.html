@@ -4,8 +4,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 	<title>Todo: Buy</title>
-	<link rel="icon" type="image/svg+xml" href="icon.svg">
-	<link rel="apple-touch-icon" href="icon.svg">
+	<link rel="icon" type="image/svg+xml" href="todo-buy.svg">
+	<link rel="apple-touch-icon" href="todo-buy.svg">
 	<style>
 :root {
 	/* Dark Mode Palette */
@@ -1670,7 +1670,7 @@ function todoBuyApp() {
 
 		canDeleteItem(item) {
 			if (!this.draft.store || !item) return false;
-			return !this.isItemSelected(item) && !this.isItemPresentExact(this.draft.store, item);
+			return !this.isItemPresentExact(this.draft.store, item);
 		},
 
 		isItemPresentForStore(store, itemName) {

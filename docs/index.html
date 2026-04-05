@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+	<meta name="theme-color" content="#f2eee4">
+	<title>Pocket Apps</title>
+	<script defer src="./alpine.min.js"></script>
+<style>
+:root {
+	color-scheme: light;
+	--bg: #f2eee4;
+	--bg-soft: rgba(255, 252, 246, 0.72);
+	--text: #1c1a17;
+	--text-soft: #635b50;
+	--line: rgba(28, 26, 23, 0.14);
+	--accent: #17645d;
+	--accent-strong: #0e4d47;
+	--max-width: 32rem;
+}
+
+* {
+	box-sizing: border-box;
+	-webkit-tap-highlight-color: transparent;
+}
+
+html {
+	background:
+		radial-gradient(circle at top left, rgba(23, 100, 93, 0.14), transparent 34%),
+		linear-gradient(180deg, #f7f3eb 0%, var(--bg) 100%);
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", "Inter", "Ubuntu", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	color: var(--text);
+}
+
+a {
+	color: inherit;
+}
+
+main {
+	width: min(100%, var(--max-width));
+	margin: 0 auto;
+	padding: 2rem 1.25rem 3rem;
+}
+
+.kicker {
+	margin: 0 0 0.75rem;
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--accent-strong);
+}
+
+h1 {
+	margin: 0;
+	font-family: "Aptos Display", "Segoe UI Variable Display", "Segoe UI", "Ubuntu Sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-size: clamp(2.25rem, 9vw, 4rem);
+	line-height: 0.92;
+	font-weight: 700;
+	letter-spacing: -0.05em;
+}
+
+.intro {
+	padding-bottom: 1.75rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.lead {
+	margin: 1rem 0 0;
+	max-width: 24rem;
+	font-size: 1.08rem;
+	line-height: 1.55;
+	color: var(--text-soft);
+}
+
+.meta {
+	margin: 0 0 0.45rem;
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-soft);
+}
+
+.pin-note {
+	margin: 0;
+	font-size: 0.98rem;
+	line-height: 1.5;
+	color: var(--text);
+	padding: 0 1rem;
+}
+
+.pin-panel {
+	margin-top: 0.95rem;
+	padding: 0.15rem 0 0;
+}
+
+.apps {
+	padding-top: 0.35rem;
+}
+
+.app-item {
+	padding: 1.2rem 0 1.35rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.app-item:first-child {
+	padding-top: 1.05rem;
+}
+
+.app-card {
+	display: block;
+	padding: 1rem 1rem 1.05rem;
+	text-decoration: none;
+	border-radius: 0.7rem;
+	background: linear-gradient(180deg, rgba(255, 252, 246, 0.52), rgba(255, 252, 246, 0.16));
+	box-shadow: inset 0 0 0 1px rgba(28, 26, 23, 0.04);
+	transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.app-name-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.app-name {
+	margin: 0;
+	font-family: "Aptos Display", "Segoe UI Variable Display", "Segoe UI", "Ubuntu Sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-size: 1.65rem;
+	line-height: 1;
+	letter-spacing: -0.05em;
+}
+
+.app-link {
+	font-size: 0.82rem;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--accent-strong);
+	white-space: nowrap;
+}
+
+.app-summary {
+	margin: 0.7rem 0 0;
+	max-width: 24rem;
+	font-size: 1rem;
+	line-height: 1.55;
+	color: var(--text-soft);
+}
+
+
+.app-storage {
+	margin: 0.7rem 1rem 0;
+	font-size: 0.84rem;
+	line-height: 1.45;
+	color: var(--text-soft);
+}
+
+.app-storage strong {
+	font-weight: 600;
+	color: inherit;
+}
+
+.app-card:active .app-link,
+.app-card:hover .app-link,
+.app-card:focus-visible .app-link {
+	color: var(--accent);
+}
+
+.app-card:hover,
+.app-card:focus-visible {
+	background: linear-gradient(180deg, rgba(255, 252, 246, 0.78), rgba(255, 252, 246, 0.3));
+	box-shadow: inset 0 0 0 1px rgba(23, 100, 93, 0.1);
+}
+
+.app-card:active {
+	transform: scale(0.95);
+}
+
+.app-card:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 0.3rem;
+}
+
+.footer-note {
+	margin: 1.1rem 0 0;
+	font-size: 0.92rem;
+	line-height: 1.5;
+	color: var(--text-soft);
+	padding: 0 1rem;
+}
+
+</style>
+</head>
+<body>
+	<main x-data="appIndex()" x-init="init()">
+		<section class="intro" aria-labelledby="page-title">
+			<p class="kicker">Pocket Apps</p>
+			<h1 id="page-title">Pocket apps for everyday use.</h1>
+			<p class="lead">A set of simple, focused apps designed for quick access on your phone.</p>
+		</section>
+
+		<section class="apps" aria-labelledby="apps-title">
+			<p class="meta" id="apps-title">Available Apps</p>
+			<div class="pin-panel">
+				<p class="pin-note" x-text="instruction()">Open an app on your phone, then use your browser menu or share menu to add it to your home screen.</p>
+			</div>
+		</section>
+
+		<section>
+			<template x-for="app in apps" :key="app.id">
+				<div class="app-item">
+					<a class="app-card" :href="app.href">
+						<div class="app-name-row">
+							<h2 class="app-name" x-text="app.name">App Name</h2>
+							<span class="app-link">Open</span>
+						</div>
+						<p class="app-summary" x-text="app.summary">App summary.</p>
+					</a>
+					<p class="app-storage">Storage used: <strong x-text="prettyBytes(getStorageUsed(app))"></strong></p>
+				</div>
+			</template>
+
+			<p class="footer-note">Pin each app from its own page so it opens in one tap like a dedicated phone app.</p>
+			<p class="app-storage">Total storage used: <strong x-text="prettyBytes(getStorageUsed())"></strong> / <strong x-text="prettyBytes(localStorageQuota)"></strong></p>
+		</section>
+	</main>
+
+<script>
+const APPS = [
+	Object.freeze({
+		id: 'feather-weight',
+		name: 'Feather Weight',
+		href: './feather-weight.html',
+		summary: 'Track body weight over time with a quick-entry flow, trend chart, and full history view.',
+		localStoragePrefix: 'feather-weight-data',
+	}),
+	Object.freeze({
+		id: 'todo-buy',
+		name: 'Todo: Buy',
+		href: './todo-buy.html',
+		summary: 'Build store-based shopping lists with saved item history, fast item entry, and a dedicated shopping mode.',
+		localStoragePrefix: 'todo_buy_data',
+	})
+];
+
+function appIndex() {
+	return {
+		platform: null,
+		totalBytes: 0,
+		localStorageQuota: 0,
+		apps: APPS,
+		init() {
+			this.detectPlatform();
+
+			if (navigator.storage && navigator.storage.estimate) {
+				navigator.storage.estimate().then(estimate => {
+					this.localStorageQuota = estimate.quota || 0;
+				});
+			}
+		},
+		detectPlatform() {
+			let ua = navigator.userAgent || '';
+			let low = ua.toLowerCase();
+			let isIOS = /iphone|ipad|ipod/.test(low);
+			let isAndroid = /android/.test(low);
+			let isSamsung = /samsungbrowser/.test(low);
+			let isEdge = /edg|edgios|edga/.test(low);
+			let isFirefox = /firefox|fxios/.test(low);
+			let isChrome = /chrome|crios/.test(low) && !isEdge && !isSamsung;
+			let isSafari = /safari/.test(low) && !isChrome && !isEdge && !isFirefox;
+
+			if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+				this.platform = 'standalone';
+			}
+			else if (isIOS && isSafari) {
+				this.platform = 'ios-safari';
+			}
+			else if (isAndroid && isSamsung) {
+				this.platform = 'android-samsung';
+			}
+			else if (isAndroid && isFirefox) {
+				this.platform = 'android-firefox';
+			}
+			else if (isAndroid && (isChrome || isEdge)) {
+				this.platform = 'android-chromium';
+			}
+			else if (isIOS && (isChrome || isEdge || isFirefox)) {
+				this.platform = 'ios-alt';
+			}
+			else if (isIOS) {
+				this.platform = 'ios';
+			}
+			else if (isAndroid) {
+				this.platform = 'android';
+			}
+			else {
+				this.platform = null;
+			}
+		},
+		getStorageUsed(app = null) {
+			let keys = app ? Object.keys(localStorage).filter(key => key.startsWith(app.localStoragePrefix)) : Object.keys(localStorage);
+			let total = 0;
+			for (let key of keys) {
+				let value = localStorage.getItem(key) || '';
+				total += this.measureTextBytes(key) + this.measureTextBytes(value);
+			}
+			return total;
+		},
+		measureTextBytes(text) {
+			return new TextEncoder().encode(String(text)).length;
+		},
+		prettyBytes(bytes) {
+			const KIB = 1024;
+			const MIB = KIB * 1024;
+			const GIB = MIB * 1024;
+
+			if (bytes >= GIB) {
+				return `${(bytes / GIB).toFixed(1)} GiB`;
+			}
+
+			if (bytes >= MIB) {
+				return `${(bytes / MIB).toFixed(1)} MiB`;
+			}
+
+			if (bytes >= KIB) {
+				return `${(bytes / KIB).toFixed(1)} KiB`;
+			}
+
+			return bytes + ' byte' + (bytes === 1 ? '' : 's');
+		},
+		instruction() {
+			if (this.platform === 'standalone') {
+				return 'This page is already running in home-screen mode.';
+			}
+
+			if (this.platform === 'ios-safari' || this.platform === 'ios') {
+				return 'Open the app you want, tap Share, then choose Add to Home Screen.';
+			}
+
+			if (this.platform === 'android-samsung') {
+				return 'Open the app you want, then use the Samsung Internet menu and choose Add page to home screen.';
+			}
+
+			if (this.platform === 'android-firefox') {
+				return 'Open the app you want, then use the Firefox menu and choose Install or Add to Home screen.';
+			}
+
+			if (this.platform === 'android-chromium' || this.platform === 'android') {
+				return 'Open the app you want, then use the browser menu and choose Add to Home screen or Install app.';
+			}
+
+			if (this.platform === 'ios-alt') {
+				return 'Open the app you want, then use the share menu and look for Add to Home Screen. If that option is missing, open the same app in Safari.';
+			}
+
+			return 'Open an app on your phone, then use your browser menu or share menu to add it to your home screen.';
+		}
+	};
+}
+</script>
+</body>
+</html>
