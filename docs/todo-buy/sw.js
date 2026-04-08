@@ -1,7 +1,9 @@
-const CACHE_NAME = 'todo-buy-v2026-04-08';
+const CACHE_NAME = 'todo-buy-v20260408a';
 const APP_ASSETS = [
 	'./',
+	'./index.css',
 	'./index.html',
+	'./index.js',
 	'./manifest.webmanifest',
 	'./icon.svg',
 	'./icon-192.png',
