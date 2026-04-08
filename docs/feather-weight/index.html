@@ -10,8 +10,8 @@
 	<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 	<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
 	<link rel="apple-touch-icon" href="./icon.svg">
-	<link rel="stylesheet" href="./index.css">
-	<script defer src="./index.js"></script>
+	<link rel="stylesheet" href="./index.css?cache=bust1">
+	<script defer src="./index.js?cache=bust1"></script>
 	<script defer src="../alpine.min.js"></script>
 </head>
 <body x-on:keydown.escape.window="handleEscape()">
@@ -67,7 +67,7 @@
 				<section class="section top-summary">
 					<div class="current-stat">
 						<div class="current-stat-grid">
-							<button class="current-stat-panel" type="button" :class="{ pulse: valuePulse }" @click="openNewEntry()" aria-label="Update current weight">
+							<button class="current-stat-panel" type="button" @click="openNewEntry()" aria-label="Update current weight">
 								<span class="stat-label">Current Weight</span>
 								<span class="current-stat-copy">
 									<span class="current-stat-value-row">
@@ -118,10 +118,10 @@
 				<section class="section chart-card">
 
 					<div class="chart-shell">
-						<div class="chart-title-row">
-							<div class="chart-title-label">Trend</div>
+						<div class="chart-title-row section-title-row">
+							<div class="chart-title-label section-title-label">Trend</div>
 							<template x-if="sortedEntries.length > 0">
-								<div class="segmented chart-controls" aria-label="Choose chart zoom" :style="{ '--segment-count': zoomOptions.length, '--segment-active': Math.max(zoomOptions.indexOf(appState.zoom), 0) }">
+								<div class="segmented chart-controls section-controls" aria-label="Choose chart zoom" :style="{ '--segment-count': zoomOptions.length, '--segment-active': Math.max(zoomOptions.indexOf(appState.zoom), 0) }">
 									<template x-for="zoom in zoomOptions" :key="`zoom-${zoom}`">
 										<button type="button" :class="{ active: appState.zoom === zoom }" @click="setZoom(zoom)" x-text="zoom"></button>
 									</template>
@@ -153,6 +153,7 @@
 												<g x-html="chartRender.verticalMajorGridMarkup"></g>
 											<line x1="0" :y1="chartRender.model.plotBottom" :x2="chartRender.model.width" :y2="chartRender.model.plotBottom" stroke="var(--border)" stroke-width="1"></line>
 											<path :d="chartRender.model.path" fill="none" stroke="var(--line)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+											<g x-html="chartRender.valueLabelsMarkup"></g>
 											<g x-html="chartRender.pointsMarkup"></g>
 											<g x-html="chartRender.xLabelsMarkup"></g>
 										</g>
@@ -167,48 +168,55 @@
 
 			<template x-if="sortedEntries.length > 0">
 				<section class="section history-section">
-					<div class="history-section-kicker">Weekly History</div>
+					<div class="history-title-row section-title-row">
+						<div class="history-section-kicker section-title-label">History</div>
+						<div class="segmented compact history-controls section-controls" role="group" aria-label="Choose history view" :style="{ '--segment-count': historyViewOptions.length, '--segment-active': Math.max(historyViewOptions.indexOf(activeHistoryView), 0) }">
+							<template x-for="historyView in historyViewOptions" :key="`history-view-${historyView}`">
+								<button type="button" :class="{ active: activeHistoryView === historyView }" @click="setHistoryView(historyView)" x-text="historyView"></button>
+							</template>
+						</div>
+					</div>
 
 					<ul class="history-week-list">
-						<template x-for="week in visibleWeeklyHistory" :key="week.weekStart">
-							<li class="history-week-card" :class="{ expanded: expandedWeeks[week.weekStart] }">
+						<template x-for="period in visibleHistory" :key="period.periodStart">
+							<li class="history-week-card" :class="{ expanded: expandedHistory[period.periodStart] }">
 								<div class="history-week-row">
 									<div class="history-week-main">
-										<div class="history-week-date" x-text="week.weekLabel"></div>
+										<div class="history-week-date" x-text="period.periodLabel"></div>
 										<div class="history-week-delta">
-											<template x-if="week.delta">
-												<div class="history-week-delta-value tone-value" :class="week.delta.tone">
-													<span x-text="week.delta.number"></span>
-													<span class="history-week-delta-unit" x-text="week.delta.unit"></span>
+											<template x-if="period.delta">
+												<div class="history-week-delta-value tone-value" :class="period.delta.tone">
+													<span x-text="period.delta.number"></span>
+													<span class="history-week-delta-unit" x-text="period.delta.unit"></span>
 												</div>
 											</template>
-											<template x-if="!week.delta">
+											<template x-if="!period.delta">
 												<div class="history-week-delta-value tone-value missing">--</div>
 											</template>
 										</div>
 										<div class="history-week-value-group">
-											<span class="history-week-value" x-text="week.medianValue"></span>
+											<span class="history-week-value" x-text="period.medianValue"></span>
 											<span class="history-week-unit" x-text="appState.unit"></span>
 										</div>
 									</div>
 									<button
 										class="history-week-toggle"
 										type="button"
-										@click="toggleWeekExpansion(week.weekStart)"
-										:aria-expanded="expandedWeeks[week.weekStart] ? 'true' : 'false'"
-										:aria-label="(expandedWeeks[week.weekStart] ? 'Collapse' : 'Expand') + ' week of ' + week.weekLabel"
+										@click="toggleHistoryExpansion(period.periodStart)"
+										:aria-expanded="expandedHistory[period.periodStart] ? 'true' : 'false'"
+										:aria-label="(expandedHistory[period.periodStart] ? 'Collapse' : 'Expand') + ' ' + historyPeriodName + ' of ' + period.periodLabel"
 									>⌄</button>
 								</div>
 
-								<div class="history-week-detail" :aria-hidden="expandedWeeks[week.weekStart] ? 'false' : 'true'">
+								<div class="history-week-detail" :aria-hidden="expandedHistory[period.periodStart] ? 'false' : 'true'">
 									<div class="history-week-detail-inner">
 										<ul class="history-list">
-											<template x-for="entry in week.entries" :key="entry.date">
+											<template x-for="entry in period.entries" :key="entry.date">
 												<li class="history-item"
 													:class="{ removing: !!removingIds[entry.date] }"
 													@contextmenu.prevent="openEdit(entry)">
 													<div class="history-date">
-														<div class="history-day" x-text="formatWeekday(entry.date) + (entry.date === week.medianEntry.date ? ' ◦' : '')"></div>
+														<div class="history-day" x-text="formatHistoryEntryLabel(entry.date) + (period.medianEntry && entry.date === period.medianEntry.date ? ' ◦' : '')"></div>
 													</div>
 													<div class="history-spacer" aria-hidden="true"></div>
 													<div class="history-value">
@@ -225,7 +233,7 @@
 						</template>
 					</ul>
 
-					<template x-if="hasMoreWeeklyHistory">
+					<template x-if="hasMoreHistory">
 						<div class="history-load-more-row">
 							<button class="history-load-more" type="button" @click="loadFullHistory()">Load All History</button>
 						</div>
@@ -352,14 +360,22 @@
 						</div>
 					</template>
 					<template x-if="overlayMode === 'goal'">
-						<div class="sheet-field">
-							<div class="sheet-field-label" x-text="appState.unit + ' Loss Per Week'"></div>
-							<div class="goal-rate-stepper">
-								<button class="goal-rate-button" type="button" @click="changeGoalRate(-1)" aria-label="Lower weekly loss rate">−</button>
-								<div class="goal-rate-value">
-									<div class="goal-rate-number" x-text="goalRateDraftLabel"></div>
+						<div class="sheet-field full">
+							<div class="sheet-field-label">Goal Pace</div>
+							<div class="goal-rate-panel">
+								<div class="segmented goal-rate-period-picker" role="group" aria-label="Choose goal pace unit" :style="{ '--segment-count': goalRateUnitOptions.length, '--segment-active': Math.max(goalRateUnitOptions.indexOf(goalRateDraftUnit), 0) }">
+									<template x-for="rateUnit in goalRateUnitOptions" :key="`goal-rate-draft-${rateUnit}`">
+										<button type="button" :class="{ active: goalRateDraftUnit === rateUnit }" @click="setGoalRateDraftUnit(rateUnit)" x-text="rateUnit"></button>
+									</template>
 								</div>
-								<button class="goal-rate-button" type="button" @click="changeGoalRate(1)" aria-label="Raise weekly loss rate">+</button>
+								<div class="goal-rate-stepper">
+									<button class="goal-rate-button" type="button" @click="changeGoalRate(-1)" :aria-label="'Lower ' + goalRateDraftUnit.toLowerCase() + ' loss rate'">−</button>
+									<div class="goal-rate-value">
+										<div class="goal-rate-number" x-text="goalRateDraftLabel"></div>
+										<div class="goal-rate-unit" x-text="appState.unit + ' / ' + goalRateDraftUnit"></div>
+									</div>
+									<button class="goal-rate-button" type="button" @click="changeGoalRate(1)" :aria-label="'Raise ' + goalRateDraftUnit.toLowerCase() + ' loss rate'">+</button>
+								</div>
 							</div>
 						</div>
 					</template>

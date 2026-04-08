@@ -303,11 +303,6 @@ header {
 	border-left-color: rgba(119, 199, 192, 0.14);
 }
 
-.current-stat-panel.pulse {
-	transform: translateY(-2px);
-	opacity: 0.86;
-}
-
 .current-stat-panel:hover,
 .current-stat-panel:focus-visible {
 	background: color-mix(in srgb, var(--accent) 6%, transparent);
@@ -639,20 +634,28 @@ header {
 	padding-right: 18px;
 }
 
-.chart-title-row {
+.section-title-row {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: center;
-	gap: 10px;
+	align-items: end;
+	gap: 12px;
 	user-select: none;
+	-webkit-user-select: none;
 	width: 100%;
 	text-align: left;
-	margin-bottom: 10px;
 	padding-bottom: 10px;
 	border-bottom: 1px solid var(--border);
 }
 
-.chart-title-label {
+.chart-title-row {
+	max-width: 430px;
+	margin-left: auto;
+	margin-right: auto;
+	padding-left: 18px;
+	padding-right: 18px;
+}
+
+.section-title-label {
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.12em;
@@ -661,10 +664,9 @@ header {
 	white-space: nowrap;
 }
 
-.chart-controls {
+.section-controls {
 	justify-self: end;
-	min-width: 0;
-	min-width: 148px;
+	min-width: 118px;
 	padding: 2px;
 	background: var(--surface);
 	border-color: var(--border);
@@ -673,7 +675,11 @@ header {
 	--segment-indicator-shadow: none;
 }
 
-.chart-controls button {
+.chart-controls {
+	min-width: 148px;
+}
+
+.section-controls button {
 	height: 28px;
 	padding: 0 10px;
 	font-size: 10px;
@@ -744,15 +750,16 @@ header {
 		width: 100%;
 	}
 
-	.chart-title-row {
+	.section-title-row {
 		grid-template-columns: 1fr;
 	}
 
-	.chart-controls {
+	.section-controls {
 		justify-self: stretch;
+		width: 100%;
 	}
 
-	.chart-controls button {
+	.section-controls button {
 		padding: 0 8px;
 	}
 
@@ -829,22 +836,12 @@ header {
 .history-section {
 	margin-top: 18px;
 	display: grid;
-	gap: 10px;
-}
-
-.history-section-kicker {
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--text-faint);
 }
 
 .history-week-list {
 	list-style: none;
 	padding: 0;
 	margin: 0;
-	border-top: 1px solid var(--border);
 }
 
 .history-week-card {
@@ -1496,6 +1493,29 @@ header {
 	align-items: stretch;
 }
 
+.goal-rate-panel {
+	display: grid;
+	gap: 10px;
+}
+
+.goal-rate-period-picker {
+	width: 100%;
+	min-width: 0;
+	padding: 3px;
+	background: var(--control-strong-bg);
+	border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+	--segment-indicator-bg: var(--sheet-control-active-bg);
+}
+
+.goal-rate-period-picker button {
+	height: 34px;
+	padding: 0 12px;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+}
+
 .goal-rate-button {
 	display: inline-flex;
 	align-items: center;
@@ -1565,6 +1585,12 @@ header {
 	font-size: 13px;
 	line-height: 1.45;
 	color: var(--text-soft);
+}
+
+@media (max-width: 420px) {
+	.sheet-meta {
+		grid-template-columns: 1fr;
+	}
 }
 
 .sheet-clear-button {
