@@ -1,4 +1,4 @@
-const CACHE_NAME = 'feather-weight-v2026-04-08';
+const CACHE_NAME = 'feather-weight-v2026-04-09';
 const APP_ASSETS = [
 	'./',
 	'./index.css',
