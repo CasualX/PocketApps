@@ -1,4 +1,4 @@
-const CACHE_NAME = 'todo-buy-v1';
+const CACHE_NAME = 'todo-buy-v2026-04-08';
 const APP_ASSETS = [
 	'./',
 	'./index.html',
