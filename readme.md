@@ -1,7 +1,18 @@
-Todo: Buy
-=========
+Pocket Apps
+===========
 
-A simple web app to manage your shopping and todo lists.
+https://casualhacks.net/TodoBuy/index.html
 
-Try it out! Mobile friendly and works offline:  
-https://casualhacks.net/TodoBuy/todo-buy.html
+Simple mobile-friendly web apps that you can pin to your home screen and use offline.
+
+Built with HTML, CSS, and JavaScript, no build tools required.
+
+📜 License
+----------
+
+Licensed under [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0), see [license.txt](license.txt).
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, shall be licensed as above, without any additional terms or conditions.
