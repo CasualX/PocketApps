@@ -1,7 +1,7 @@
 Pocket Apps
 ===========
 
-https://casualhacks.net/TodoBuy/index.html
+https://casualhacks.net/PocketApps/index.html
 
 Simple mobile-friendly web apps that you can pin to your home screen and use offline.
 
