@@ -291,7 +291,7 @@
 			<div class="settings-card">
 				<div class="settings-action-main">
 					<div class="settings-action-title">Theme</div>
-					<div class="settings-action-subtitle">Match the system setting or pin the app to light or dark mode.</div>
+					<div class="settings-action-subtitle">Select the preferred color theme.</div>
 				</div>
 				<div class="segmented compact" role="group" aria-label="Choose theme" :style="{ '--segment-count': themeOptions.length, '--segment-active': Math.max(themeOptions.indexOf(data.themeMode), 0) }">
 					<template x-for="theme in themeOptions" :key="'theme-' + theme">

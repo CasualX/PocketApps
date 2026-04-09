@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+	<meta name="theme-color" content="#f3ecdf">
+	<title>Upkeep</title>
+	<link rel="manifest" href="./manifest.webmanifest">
+	<link rel="icon" type="image/svg+xml" href="./icon.svg">
+	<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+	<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+	<link rel="shortcut icon" href="./icon-192.png">
+	<link rel="apple-touch-icon" href="./icon-192.png">
+	<link rel="stylesheet" href="./index.css">
+	<script defer src="./index.js"></script>
+	<script defer src="../alpine.min.js"></script>
+</head>
+<body x-data="upkeepApp()" x-init="init()" x-on:keydown.escape.window="handleEscape()" :class="{ 'app-modal-open': settingsOpen || editor.open }" x-cloak>
+	<div class="app-shell">
+		<header>
+			<div class="header-row">
+				<div class="header-side"></div>
+				<div class="header-title">
+					<h1>Upkeep</h1>
+					<p x-text="todayHeaderLabel()"></p>
+				</div>
+				<div class="header-side right">
+					<button class="icon-button" type="button" x-on:click="openSettings()" aria-label="Open settings">
+						<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M12 2.8 L13.2 2.8 L13.7 5.1 A7 7 0 0 1 15.9 6 L17.9 4.8 L19.2 6.1 L18 8.1 A7 7 0 0 1 18.9 10.3 L21.2 10.8 L21.2 12.2 L18.9 12.7 A7 7 0 0 1 18 14.9 L19.2 16.9 L17.9 18.2 L15.9 17 A7 7 0 0 1 13.7 17.9 L13.2 20.2 L10.8 20.2 L10.3 17.9 A7 7 0 0 1 8.1 17 L6.1 18.2 L4.8 16.9 L6 14.9 A7 7 0 0 1 5.1 12.7 L2.8 12.2 L2.8 10.8 L5.1 10.3 A7 7 0 0 1 6 8.1 L4.8 6.1 L6.1 4.8 L8.1 6 A7 7 0 0 1 10.3 5.1 L10.8 2.8 Z"></path>
+							<circle cx="12" cy="12" r="3.2"></circle>
+						</svg>
+					</button>
+				</div>
+			</div>
+			<div class="mode-switch" role="tablist" aria-label="Choose app view">
+				<template x-for="viewName in viewOptions" :key="viewName">
+					<button class="mode-btn" type="button" :class="{ active: ui.view === viewName }" x-on:click="ui.view = viewName" x-text="viewLabel(viewName)"></button>
+				</template>
+			</div>
+		</header>
+
+		<main class="app-scroll">
+
+			<section class="empty-state" x-show="ui.view === 'active' && visibleInstances().length === 0">
+				<div class="empty-eyebrow">Nothing active</div>
+				<h2>Build your first upkeep routine.</h2>
+				<p>Create a template for chores you repeat, then Upkeep will generate the next tasks automatically.</p>
+				<button class="primary-button" type="button" x-on:click="openTemplateEditor()">Create template</button>
+			</section>
+
+			<section x-show="ui.view === 'active' && visibleInstances().length > 0">
+				<template x-for="group in groupedActiveTasks()" :key="group.key">
+					<section class="task-group" :class="'group-' + group.key" x-show="group.items.length > 0">
+						<div class="section-heading compact">
+							<div>
+								<h2 x-text="group.title"></h2>
+							</div>
+							<!-- <div class="section-count" x-text="group.items.length"></div> -->
+						</div>
+						<div class="task-list">
+							<template x-for="instance in group.items" :key="instance.id">
+								<article class="task-card compact" :class="taskCardClasses(instance)" x-data="{ open: false }">
+									<button class="task-toggle" type="button" x-on:click="open = !open" :aria-expanded="open ? 'true' : 'false'">
+										<div class="task-toggle-main">
+											<div class="task-title-row compact">
+												<h3 x-text="instanceTitle(instance)"></h3>
+											</div>
+											<div class="task-due compact" x-text="formatTaskDateLabel(instance)"></div>
+										</div>
+										<span class="task-chevron" :class="{ open: open }" aria-hidden="true">⌄</span>
+									</button>
+									<div class="task-expand-shell" :class="{ open: open }" :style="open ? `max-height: ${$refs.expandInner.scrollHeight}px` : 'max-height: 0px'" :aria-hidden="open ? 'false' : 'true'">
+										<div class="task-expand" x-ref="expandInner">
+											<div class="task-summary" x-text="templateRuleSummary(templateForInstance(instance))"></div>
+											<ul class="checklist" x-show="hasChecklist(instance)">
+												<template x-for="item in instance.items" :key="item.id">
+													<li>
+														<button class="check-item" type="button" :class="itemButtonClasses(instance, item)" x-on:click="toggleInstanceItem(instance.id, item.id)">
+															<span class="checkbox" :class="itemCheckboxClasses(instance, item)"></span>
+															<span class="check-label" x-text="item.label"></span>
+														</button>
+													</li>
+												</template>
+											</ul>
+											<div class="task-expand-actions" x-show="!hasChecklist(instance)">
+												<button class="primary-button compact full-width" type="button" x-on:click="toggleSingleActionInstance(instance.id)" x-text="isInstanceResolved(instance) ? 'Reactivate' : 'Mark complete'"></button>
+											</div>
+										</div>
+									</div>
+								</article>
+							</template>
+						</div>
+					</section>
+				</template>
+			</section>
+
+			<section x-show="ui.view === 'templates'">
+				<div class="section-heading templates-heading">
+					<div>
+						<div class="section-kicker">Templates</div>
+						<h2>Recurring tasks</h2>
+					</div>
+					<button class="primary-button compact" type="button" x-on:click="openTemplateEditor()">New</button>
+				</div>
+
+				<section class="empty-state slim" x-show="sortedTemplates().length === 0">
+					<div class="empty-eyebrow">No templates yet</div>
+					<h2>Start with a weekly or monthly routine.</h2>
+					<p>Add checklist steps, choose a recurrence pattern, and set how far ahead to generate tasks.</p>
+				</section>
+
+				<div class="template-list">
+					<template x-for="template in sortedTemplates()" :key="template.id">
+						<article class="template-card">
+							<div class="template-card-top">
+								<div>
+									<h3 x-text="template.title"></h3>
+									<p x-text="templateRuleSummary(template)"></p>
+								</div>
+								<button class="icon-button small" type="button" x-on:click="openTemplateEditor(template.id)" aria-label="Edit template">
+									<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+										<path d="M12 20h9"></path>
+										<path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+									</svg>
+								</button>
+							</div>
+							<ul class="template-item-list" x-show="template.items.length > 0">
+								<template x-for="item in template.items" :key="item.id">
+									<li x-text="item.label"></li>
+								</template>
+							</ul>
+						</article>
+					</template>
+				</div>
+			</section>
+		</main>
+
+		<div class="save-toast" :class="{ open: saveFeedback.open }" aria-live="polite" aria-atomic="true">
+			<div class="save-toast-card">
+				<div class="save-toast-copy">
+					<div class="save-toast-kicker">Saved</div>
+					<p x-text="saveFeedback.message"></p>
+				</div>
+			</div>
+		</div>
+
+		<div class="settings-overlay" :class="{ open: settingsOpen }" :aria-hidden="settingsOpen ? 'false' : 'true'">
+			<div class="overlay-panel-inner">
+			<div class="settings-header">
+				<button class="sheet-action" type="button" x-on:click="closeSettings()">Close</button>
+				<div class="settings-title">Settings</div>
+				<div class="settings-header-spacer"></div>
+			</div>
+			<div class="settings-copy">
+				Appearance and data tools for this device.
+			</div>
+			<div class="settings-list">
+				<div class="settings-card">
+					<div class="settings-action-main">
+						<div class="settings-action-title">Theme</div>
+						<div class="settings-action-subtitle">Select the preferred color theme.</div>
+					</div>
+					<div class="segmented compact" role="group" aria-label="Choose theme" :style="{ '--segment-count': themeOptions.length, '--segment-active': Math.max(themeOptions.indexOf(data.themeMode), 0) }">
+						<template x-for="theme in themeOptions" :key="'theme-' + theme">
+							<button type="button" :class="{ active: data.themeMode === theme }" x-on:click="setTheme(theme)" x-text="themeLabel(theme)"></button>
+						</template>
+					</div>
+				</div>
+
+				<button class="settings-action-btn import" type="button" x-on:click="triggerImport()">
+					<div class="settings-action-main">
+						<div class="settings-action-title">Import data</div>
+						<div class="settings-action-subtitle">Upload a backup and replace the current templates and active tasks on this device.</div>
+					</div>
+					<div class="settings-action-icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>
+							<path d="M12 3v11"></path>
+							<path d="M8 10l4 4 4-4"></path>
+						</svg>
+					</div>
+				</button>
+
+				<button class="settings-action-btn export" type="button" x-on:click="exportData()">
+					<div class="settings-action-main">
+						<div class="settings-action-title">Export data</div>
+						<div class="settings-action-subtitle">Download a JSON backup of your templates, generated tasks, and settings.</div>
+					</div>
+					<div class="settings-action-icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>
+							<path d="M12 15V4"></path>
+							<path d="M8 8l4-4 4 4"></path>
+						</svg>
+					</div>
+				</button>
+
+				<button class="settings-action-btn wipe" type="button" x-on:click="confirmWipeData()">
+					<div class="settings-action-main">
+						<div class="settings-action-title">Wipe data</div>
+						<div class="settings-action-subtitle">Clear all saved templates, generated tasks, and app settings after confirmation.</div>
+					</div>
+					<div class="settings-action-icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M18 6 6 18M6 6l12 12"></path>
+						</svg>
+					</div>
+				</button>
+			</div>
+			</div>
+		</div>
+
+		<div class="editor-overlay" :class="{ open: editor.open }" :aria-hidden="editor.open ? 'false' : 'true'">
+			<template x-if="editor.open">
+			<form class="editor-form overlay-panel-inner" x-on:submit.prevent="saveTemplate()">
+				<div class="settings-header">
+					<button class="sheet-action" type="button" x-on:click="closeTemplateEditor()">Cancel</button>
+					<div class="sheet-title" x-text="editor.mode === 'create' ? 'New Template' : 'Edit Template'"></div>
+					<button class="sheet-action strong" type="submit">Save</button>
+				</div>
+				<div class="editor-body">
+					<div class="field-block">
+						<div class="section-row">
+							<label class="field-label" for="template-title">Title</label>
+						</div>
+						<input id="template-title" class="field-input" type="text" x-model="editor.template.title" x-ref="templateTitle" placeholder="Air conditioner filters">
+					</div>
+
+					<div class="field-block">
+						<div class="section-row">
+							<label class="field-label">Recurrence rules</label>
+						</div>
+						<div class="rule-list">
+							<template x-for="rule in editor.template.recurrence" :key="rule.id">
+								<div class="rule-card">
+									<div class="rule-card-header solo-action">
+										<button class="text-button danger" type="button" x-on:click="removeRule(rule.id)" x-show="editor.template.recurrence.length > 1">Remove</button>
+									</div>
+									<div class="field-grid two-up">
+										<div class="field-block">
+											<label class="field-label">Type</label>
+											<select class="field-input" x-model="rule.type" x-on:change="normalizeEditorRule(rule)">
+												<template x-for="option in recurrenceTypes" :key="option.value">
+													<option :value="option.value" x-text="option.label"></option>
+												</template>
+											</select>
+										</div>
+										<div class="field-block">
+											<label class="field-label">Every</label>
+											<input class="field-input" type="number" min="1" max="365" x-model.number="rule.interval">
+										</div>
+									</div>
+
+									<div class="field-grid two-up" x-show="rule.type === 'weekly'">
+										<div class="field-block full-span">
+											<label class="field-label">Weekday</label>
+											<select class="field-input" x-model="rule.day">
+												<template x-for="day in weekdayOptions" :key="day.value">
+													<option :value="day.value" x-text="day.label"></option>
+												</template>
+											</select>
+										</div>
+									</div>
+
+									<div class="field-grid two-up" x-show="rule.type === 'monthly'">
+										<div class="field-block full-span">
+											<label class="field-label">Monthly mode</label>
+											<select class="field-input" x-model="rule.mode" x-on:change="normalizeEditorRule(rule)">
+												<option value="day_of_month">Specific day</option>
+												<option value="weekday_position">Positional weekday</option>
+											</select>
+										</div>
+										<div class="field-block" x-show="rule.mode === 'day_of_month'">
+											<label class="field-label">Day</label>
+											<input class="field-input" type="number" min="1" max="31" x-model.number="rule.day">
+										</div>
+										<div class="field-block" x-show="rule.mode === 'weekday_position'">
+											<label class="field-label">Ordinal</label>
+											<select class="field-input" x-model.number="rule.ordinal">
+												<template x-for="ordinal in ordinalOptions" :key="ordinal.value">
+													<option :value="ordinal.value" x-text="ordinal.label"></option>
+												</template>
+											</select>
+										</div>
+										<div class="field-block" x-show="rule.mode === 'weekday_position'">
+											<label class="field-label">Weekday</label>
+											<select class="field-input" x-model="rule.weekday">
+												<template x-for="day in weekdayOptions" :key="day.value + '-monthly'">
+													<option :value="day.value" x-text="day.label"></option>
+												</template>
+											</select>
+										</div>
+									</div>
+
+									<div class="field-grid two-up" x-show="rule.type === 'yearly'">
+										<div class="field-block">
+											<label class="field-label">Month</label>
+											<select class="field-input" x-model.number="rule.month">
+												<template x-for="month in monthOptions" :key="month.value">
+													<option :value="month.value" x-text="month.label"></option>
+												</template>
+											</select>
+										</div>
+										<div class="field-block">
+											<label class="field-label">Day</label>
+											<input class="field-input" type="number" min="1" max="31" x-model.number="rule.day">
+										</div>
+									</div>
+
+									<div class="inline-note rule-note" x-text="describeRule(rule)"></div>
+								</div>
+							</template>
+						</div>
+						<button class="secondary-button compact" type="button" x-on:click="addRule()">Add rule</button>
+					</div>
+
+					<div class="field-block">
+						<div class="section-row">
+							<label class="field-label">Checklist items</label>
+						</div>
+						<p class="inline-note" x-show="editor.template.items.length === 0 && !editor.draftChecklistItem.trim()">Leave this empty if the task should be completed as a single action.</p>
+						<div class="item-editor-list">
+							<template x-for="(item, itemIndex) in editor.template.items" :key="item.id">
+								<div class="item-editor-row">
+									<input class="field-input" type="text" x-model="item.label" :placeholder="'Step ' + (itemIndex + 1)">
+									<div class="item-editor-actions">
+										<button class="icon-button tiny" type="button" x-on:click="moveChecklistItem(itemIndex, -1)" :disabled="itemIndex === 0" aria-label="Move item up">↑</button>
+										<button class="icon-button tiny" type="button" x-on:click="moveChecklistItem(itemIndex, 1)" :disabled="itemIndex === editor.template.items.length - 1" aria-label="Move item down">↓</button>
+										<button class="icon-button tiny danger" type="button" x-on:click="removeChecklistItem(item.id)" aria-label="Remove item">×</button>
+									</div>
+								</div>
+							</template>
+							<div class="item-editor-row">
+								<input class="field-input" type="text" x-model="editor.draftChecklistItem" x-on:keydown.enter.prevent="acceptDraftChecklistItem()" :placeholder="'Step ' + (editor.template.items.length + 1)">
+								<div class="item-editor-actions">
+									<button class="icon-button tiny" type="button" x-on:click="acceptDraftChecklistItem()" :disabled="!editor.draftChecklistItem.trim()" aria-label="Accept item">✓</button>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="field-block">
+						<div class="section-row">
+							<label class="field-label" for="generation-window">Create tasks ahead</label>
+						</div>
+						<div class="field-hint">How many days in advance upcoming tasks should appear.</div>
+						<input id="generation-window" class="field-input" type="number" min="0" max="365" x-model.number="editor.template.generationWindowDays">
+					</div>
+
+					<div class="danger-zone" x-show="editor.mode === 'edit'">
+						<div>
+							<div class="field-label">Delete template</div>
+							<div class="field-hint">This removes the template and all generated instances tied to it.</div>
+						</div>
+						<button class="secondary-button danger" type="button" x-on:click="deleteTemplate(editor.template.id)">Delete</button>
+					</div>
+				</div>
+			</form>
+			</template>
+		</div>
+
+		<input
+			type="file"
+			accept=".json"
+			x-ref="importFile"
+			x-on:change="handleImport($event)"
+			style="display:none"
+		>
+	</div>
+
+	<script>
+	if ('serviceWorker' in navigator) {
+		window.addEventListener('load', () => {
+			navigator.serviceWorker.register('./sw.js').catch(error => {
+				console.error('Service worker registration failed:', error);
+			});
+		});
+	}
+	</script>
+</body>
+</html>

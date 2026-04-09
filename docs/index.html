@@ -286,7 +286,14 @@ const APPS = [
 		href: './todo-buy/',
 		summary: 'Build store-based shopping lists with saved item history, fast item entry, and a dedicated shopping mode.',
 		localStoragePrefix: 'todo_buy_data',
-	})
+	}),
+	Object.freeze({
+		id: 'upkeep',
+		name: 'Upkeep',
+		href: './upkeep/',
+		summary: 'Recurring task reminders with checklists. Define templates, and track completion.',
+		localStoragePrefix: 'upkeep-data',
+	}),
 ];
 
 function measureTextBytes(text) {
