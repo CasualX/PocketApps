@@ -5,19 +5,10 @@ const DEMO_HASH = '#demo';
 const RESOLVED_RETENTION_DAYS = 1;
 const CURRENT_WINDOW_DAYS = 1;
 const THEME_OPTIONS = Object.freeze(['auto', 'light', 'dark']);
-const THEME_COLORS = Object.freeze({
-	light: '#f3ecdf',
-	dark: '#141311'
-});
+const THEME_COLORS = Object.freeze({ light: '#f3ecdf', dark: '#141311' });
 const WEEKDAY_NAMES = Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
 const MONTH_LABELS = Object.freeze(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']);
-const ORDINAL_LABELS = Object.freeze({
-	1: 'first',
-	2: 'second',
-	3: 'third',
-	4: 'fourth',
-	'-1': 'last'
-});
+const ORDINAL_LABELS = Object.freeze({ 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', '-1': 'last' });
 
 function defaultAppState() {
 	return {
@@ -239,9 +230,7 @@ function normalizeAppState(saved) {
 	let themeMode = THEME_OPTIONS.includes(saved.themeMode) ? saved.themeMode : state.themeMode;
 	let templates = Array.isArray(saved.templates) ? saved.templates.map(normalizeTemplate).filter(Boolean) : [];
 	let templateIds = new Set(templates.map(template => template.id));
-	let instances = Array.isArray(saved.instances)
-		? saved.instances.map(normalizeInstance).filter(instance => instance && templateIds.has(instance.templateId))
-		: [];
+	let instances = Array.isArray(saved.instances) ? saved.instances.map(normalizeInstance).filter(instance => instance && templateIds.has(instance.templateId)) : [];
 
 	return {
 		version: VERSION,

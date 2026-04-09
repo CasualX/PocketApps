@@ -7,11 +7,7 @@ const UNIT_OPTIONS = Object.freeze(['KG', 'LBS']);
 const ZOOM_OPTIONS = Object.freeze(['Week', 'Month', 'Year']);
 const VIEW_OPTIONS = Object.freeze(['Week', 'Month']);
 const THEME_OPTIONS = Object.freeze(['auto', 'light', 'dark']);
-
-const THEME_COLORS = Object.freeze({
-	light: '#f7f4ec',
-	dark: '#000000'
-});
+const THEME_COLORS = Object.freeze({ light: '#f7f4ec', dark: '#131618' });
 
 function defaultAppState() {
 	return {
@@ -186,15 +182,12 @@ function featherWeightApp() {
 		},
 
 		applyTheme() {
-			let resolved;
-			if (this.appState.themeMode === 'light' || this.appState.themeMode === 'dark') {
-				resolved = this.appState.themeMode;
-			}
-			else {
-				resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+			let resolvedTheme = this.data.themeMode;
+			if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') {
+				resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 			}
 
-			document.documentElement.setAttribute('data-theme', resolved);
+			document.documentElement.setAttribute('data-theme', resolvedTheme);
 
 			let themeColorMeta = document.querySelector('head > meta[name="theme-color"]');
 			if (!themeColorMeta) {
@@ -202,7 +195,7 @@ function featherWeightApp() {
 				themeColorMeta.setAttribute('name', 'theme-color');
 				document.head.appendChild(themeColorMeta);
 			}
-			themeColorMeta.setAttribute('content', THEME_COLORS[resolved]);
+			themeColorMeta.setAttribute('content', THEME_COLORS[resolvedTheme]);
 		},
 
 		resolvedTheme() {

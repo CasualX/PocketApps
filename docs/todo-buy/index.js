@@ -1,10 +1,7 @@
 const VERSION = '1.0';
 const STORAGE_KEY = 'todo_buy_data';
 const THEME_OPTIONS = Object.freeze(['auto', 'light', 'dark']);
-const THEME_COLORS = Object.freeze({
-	light: '#f4efe6',
-	dark: '#000000'
-});
+const THEME_COLORS = Object.freeze({ light: '#f4efe6', dark: '#000000' });
 
 function defaultAppData() {
 	return {
@@ -135,12 +132,12 @@ function todoBuyApp() {
 		},
 
 		applyTheme() {
-			let resolved = this.data.themeMode;
-			if (resolved !== 'light' && resolved !== 'dark') {
-				resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+			let resolvedTheme = this.data.themeMode;
+			if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') {
+				resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 			}
 
-			document.documentElement.setAttribute('data-theme', resolved);
+			document.documentElement.setAttribute('data-theme', resolvedTheme);
 
 			let themeColorMeta = document.querySelector('head > meta[name="theme-color"]');
 			if (!themeColorMeta) {
@@ -148,7 +145,7 @@ function todoBuyApp() {
 				themeColorMeta.setAttribute('name', 'theme-color');
 				document.head.appendChild(themeColorMeta);
 			}
-			themeColorMeta.setAttribute('content', THEME_COLORS[resolved]);
+			themeColorMeta.setAttribute('content', THEME_COLORS[resolvedTheme]);
 		},
 
 		handleEscape() {
