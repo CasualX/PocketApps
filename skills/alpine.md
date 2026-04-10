@@ -138,9 +138,9 @@ $nextTick
 Wait until the next "tick" (browser paint) to run a bit of code
 <div
   x-text="count"
-  x-text="$nextTick(() => {"
+  x-text="$nextTick(() => {
     console.log('count is ' + $el.textContent)
-  })
+  })"
 >...</div>
 
 Alpine.data
