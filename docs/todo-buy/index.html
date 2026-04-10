@@ -4,19 +4,19 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 	<title>Todo: Buy</title>
-	<link rel="manifest" href="./manifest.webmanifest?v=20260409pwa1">
-	<link rel="icon" type="image/svg+xml" href="./icon.svg?v=20260409pwa1">
-	<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=20260409pwa1">
-	<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=20260409pwa1">
-	<link rel="shortcut icon" href="./icon-192.png?v=20260409pwa1">
-	<link rel="apple-touch-icon" href="./icon-192.png?v=20260409pwa1">
+	<link rel="manifest" href="./manifest.webmanifest?v=20260410pwa1">
+	<link rel="icon" type="image/svg+xml" href="./icon.svg?v=20260410pwa1">
+	<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=20260410pwa1">
+	<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=20260410pwa1">
+	<link rel="shortcut icon" href="./icon-192.png?v=20260410pwa1">
+	<link rel="apple-touch-icon" href="./icon-192.png?v=20260410pwa1">
 	<link rel="stylesheet" href="./index.css">
-	<script defer src="./index.js"></script>
+	<script type="module" src="./index.js"></script>
 	<script defer src="../alpine.min.js"></script>
 </head>
 
 
-<body x-data="todoBuyApp()" x-init="init()" x-on:keydown.escape.window="handleEscape()" x-on:pointermove.window="handleDragMove($event)" x-on:pointerup.window="finishItemDrag($event)" x-on:pointercancel.window="finishItemDrag($event)" x-cloak>
+<body x-data="todoBuyViewModel()" x-init="init()" x-on:keydown.escape.window="handleEscape()" x-on:pointermove.window="handleDragMove($event)" x-on:pointerup.window="finishItemDrag($event)" x-on:pointercancel.window="finishItemDrag($event)" x-cloak>
 	<header>
 		<div class="header-row">
 			<div class="header-side"></div>
@@ -40,31 +40,31 @@
 
 	<main id="app-content" x-ref="appContent">
 		<!-- Add Mode -->
-		<div id="view-add" x-show="state.mode === 'add'">
+		<div id="view-add" x-show="isAddMode()">
 			<div id="card-store" class="card selector-card" x-on:click="openOverlay('store')">
 				<div class="label">Store</div>
-				<div class="value" id="disp-store" :class="{ placeholder: !draft.store }" x-text="draft.store || 'Select Store...'" ></div>
+				<div class="value" id="disp-store" :class="{ placeholder: !draft.store }" x-text="selectedStoreLabel()" ></div>
 			</div>
 
 			<div id="card-item" class="card selector-card" :class="{ disabled: !draft.store }" x-on:click="openOverlay('item')">
 				<div class="label">Item</div>
-				<div class="value" id="disp-item" :class="{ placeholder: !draft.item }" x-text="draft.item || 'Select Item...'" ></div>
+				<div class="value" id="disp-item" :class="{ placeholder: !draft.item }" x-text="selectedItemLabel()" ></div>
 			</div>
 
 			<div id="card-quantity" class="card selector-card" :class="{ disabled: !draft.store || !draft.item }" x-on:click="openOverlay('quantity')">
 				<div class="label">Quantity</div>
-				<div class="value" id="disp-qty" :class="{ placeholder: draft.qty === null || draft.qty === '' }" x-text="(draft.qty === null || draft.qty === '') ? 'Tap to enter quantity...' : draft.qty"></div>
+				<div class="value" id="disp-qty" :class="{ placeholder: !hasQuantity() }" x-text="quantityLabel()"></div>
 			</div>
 
 			<div id="card-notes" class="card selector-card" :class="{ disabled: !draft.store || !draft.item }" x-on:click="openOverlay('notes')">
 				<div class="label">Notes</div>
-				<div class="value" id="disp-notes" :class="{ placeholder: !draft.notes }" x-text="draft.notes ? draft.notes : 'Tap to add notes...'" ></div>
+				<div class="value" id="disp-notes" :class="{ placeholder: !hasNotes() }" x-text="notesLabel()" ></div>
 			</div>
 		</div>
 
 		<!-- Shopping Mode: Stores -->
-		<div id="view-shop-stores" x-show="state.mode === 'shop' && state.view === 'stores'">
-			<template x-if="shopStores().length === 0">
+		<div id="view-shop-stores" x-show="isShoppingStoresView()">
+			<template x-if="!hasShopStores()">
 				<div style="text-align:center; padding: 40px; color: var(--text-secondary)">
 					List is empty.<br>Go to "Add Item" to start.
 				</div>
@@ -73,35 +73,35 @@
 			<template x-for="store in shopStores()" :key="store">
 				<div class="store-row-card" x-on:click="openShopStore(store)">
 					<div class="store-row-name" x-text="store"></div>
-					<div class="store-row-meta" x-text="storeItemCount(store) + ' Items'"></div>
+					<div class="store-row-meta" x-text="storeItemCountLabel(store)"></div>
 				</div>
 			</template>
 		</div>
 
 		<!-- Shopping Mode: Items -->
-		<div id="view-shop-items" x-show="state.mode === 'shop' && state.view === 'items'">
+		<div id="view-shop-items" x-show="isShoppingItemsView()">
 			<div class="store-header">
-				<span class="back-btn" style="margin-right:15px; cursor:pointer;" x-on:click="state.view='stores'">❮</span>
-				<span style="flex:1;" x-text="state.activeShopStore"></span>
+				<span class="back-btn" style="margin-right:15px; cursor:pointer;" x-on:click="goBackToStoreList()">❮</span>
+				<span style="flex:1;" x-text="activeShopStoreLabel()"></span>
 			</div>
 
 			<div class="list-group shopping-items-list" x-ref="shopItemsList">
-				<template x-for="entry in shopItemsForActiveStore()" :key="entry.store + '::' + entry.itemName">
+				<template x-for="entry in shopItemsForActiveStore()" :key="entryKey(entry)">
 					<div class="list-item item-row" :data-entry-key="entryKey(entry)" :class="{ marked: entry.marked, 'drag-placeholder': isDraggingEntry(entry) }">
 						<div class="item-left">
 							<div class="item-name-line">
 								<span class="item-name" x-text="entry.itemName"></span>
-								<template x-if="entry.quantity !== null && entry.quantity !== ''">
-									<span class="item-qty" x-text="'x' + entry.quantity"></span>
+								<template x-if="entryHasQuantity(entry)">
+									<span class="item-qty" x-text="entryQuantityLabel(entry)"></span>
 								</template>
 							</div>
-							<template x-if="entry.notes">
+							<template x-if="entryHasNotes(entry)">
 								<div class="item-note-sub" x-text="entry.notes"></div>
 							</template>
 						</div>
 						<div class="item-row-actions">
 							<button class="item-drag-handle" type="button" aria-label="Drag to reorder" x-on:pointerdown="startItemDrag($event, entry)">≡</button>
-							<button class="marked-btn" x-on:click="toggleMarked(entry.store, entry.itemName)" x-text="entry.marked ? 'Undo' : 'Done'"></button>
+							<button class="marked-btn" x-on:click="toggleMarked(entry.store, entry.itemName)" x-text="entryMarkedLabel(entry)"></button>
 						</div>
 					</div>
 				</template>
@@ -112,17 +112,17 @@
 					<div class="item-left">
 						<div class="item-name-line">
 							<span class="item-name" x-text="dragState.previewEntry.itemName"></span>
-							<template x-if="dragState.previewEntry.quantity !== null && dragState.previewEntry.quantity !== ''">
-								<span class="item-qty" x-text="'x' + dragState.previewEntry.quantity"></span>
+							<template x-if="previewEntryHasQuantity()">
+								<span class="item-qty" x-text="previewEntryQuantityLabel()"></span>
 							</template>
 						</div>
-						<template x-if="dragState.previewEntry.notes">
+						<template x-if="previewEntryHasNotes()">
 							<div class="item-note-sub" x-text="dragState.previewEntry.notes"></div>
 						</template>
 					</div>
 					<div class="item-row-actions">
 						<div class="item-drag-handle" aria-hidden="true">≡</div>
-						<button class="marked-btn" type="button" tabindex="-1" x-text="dragState.previewEntry.marked ? 'Undo' : 'Done'"></button>
+						<button class="marked-btn" type="button" tabindex="-1" x-text="previewEntryMarkedLabel()"></button>
 					</div>
 				</div>
 			</template>
@@ -160,12 +160,12 @@
 			>
 		</div>
 		<div class="list-group" id="list-stores">
-			<template x-if="storeQuery.trim().length > 0">
+			<template x-if="shouldShowStoreCreateOption()">
 				<div
 					class="list-item"
-					x-on:click="selectStore(storeQuery)"
+					x-on:click="selectStore(storeCreateLabel())"
 				>
-					<div>Use: <b x-text="storeQuery"></b></div>
+					<div>Use: <b x-text="storeCreateLabel()"></b></div>
 				</div>
 			</template>
 
@@ -202,13 +202,13 @@
 			>
 		</div>
 		<div class="list-group" id="list-items">
-			<template x-if="itemQuery.trim().length > 0">
+			<template x-if="shouldShowItemCreateOption()">
 				<div
 					class="list-item"
-					:class="{ present: isItemPresentForStore(draft.store, itemQuery) }"
-					x-on:click="selectItem(itemQuery)"
+					:class="{ present: isItemPresentForStore(draft.store, itemCreateLabel()) }"
+					x-on:click="selectItem(itemCreateLabel())"
 				>
-					<div>Use: <b x-text="itemQuery"></b></div>
+					<div>Use: <b x-text="itemCreateLabel()"></b></div>
 				</div>
 			</template>
 
@@ -292,9 +292,9 @@
 					<div class="settings-action-title">Theme</div>
 					<div class="settings-action-subtitle">Select the preferred color theme.</div>
 				</div>
-				<div class="segmented compact" role="group" aria-label="Choose theme" :style="{ '--segment-count': themeOptions.length, '--segment-active': Math.max(themeOptions.indexOf(data.themeMode), 0) }">
+				<div class="segmented compact" role="group" aria-label="Choose theme" :style="themeSegmentStyle()">
 					<template x-for="theme in themeOptions" :key="'theme-' + theme">
-						<button type="button" :class="{ active: data.themeMode === theme }" x-on:click="data.themeMode = theme" x-text="theme"></button>
+						<button type="button" :class="{ active: isThemeActive(theme) }" x-on:click="setThemeMode(theme)" x-text="theme"></button>
 					</template>
 				</div>
 			</div>

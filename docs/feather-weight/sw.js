@@ -1,7 +1,8 @@
 const CACHE_PREFIX = 'feather-weight';
-const CACHE_NAME = 'feather-weight-v20260409pwa1';
+const CACHE_NAME = `${CACHE_PREFIX}-v20260410mvvm2`;
 const APP_ASSETS = [
 	'./',
+	'./app.js',
 	'./index.css',
 	'./index.html',
 	'./index.js',

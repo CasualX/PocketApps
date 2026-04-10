@@ -11,11 +11,11 @@
 	<link rel="shortcut icon" href="./icon-192.png?v=20260409pwa1">
 	<link rel="apple-touch-icon" href="./icon-192.png?v=20260409pwa1">
 	<link rel="stylesheet" href="./index.css">
-	<script defer src="./index.js"></script>
+	<script type="module" src="./index.js"></script>
 	<script defer src="../alpine.min.js"></script>
 </head>
 <body x-on:keydown.escape.window="handleEscape()">
-	<div class="app-shell" x-data="featherWeightApp()" x-init="init()" x-cloak>
+	<div class="app-shell" x-data="featherWeightViewModel()" x-init="init()" x-cloak>
 		<div class="app-scroll" x-show="!settingsOpen">
 			<header>
 				<div class="header-row">
@@ -46,9 +46,9 @@
 					<div class="empty-intro-actions">
 						<div class="empty-intro-step">
 							<div class="empty-intro-hint">Choose Unit</div>
-							<div class="segmented empty-unit-picker" role="group" aria-label="Choose unit" :style="{ '--segment-count': unitOptions.length, '--segment-active': Math.max(unitOptions.indexOf(appState.unit), 0) }">
+							<div class="segmented empty-unit-picker" role="group" aria-label="Choose unit" :style="{ '--segment-count': unitOptions.length, '--segment-active': Math.max(unitOptions.indexOf(model.unit), 0) }">
 								<template x-for="unit in unitOptions" :key="`empty-unit-${unit}`">
-									<button type="button" :class="{ active: appState.unit === unit }" @click="switchUnit(unit)" x-text="unit"></button>
+									<button type="button" :class="{ active: model.unit === unit }" @click="switchUnit(unit)" x-text="unit"></button>
 								</template>
 							</div>
 						</div>
@@ -72,7 +72,7 @@
 								<span class="current-stat-copy">
 									<span class="current-stat-value-row">
 										<span class="current-stat-value" x-text="currentWeightLabel"></span>
-										<span class="current-stat-unit" x-text="appState.unit"></span>
+										<span class="current-stat-unit" x-text="model.unit"></span>
 									</span>
 									<span class="current-stat-meta" x-text="currentPanelDateLabel"></span>
 								</span>
@@ -81,9 +81,9 @@
 								<span class="stat-label">Goal Weight</span>
 								<span class="current-stat-copy">
 									<span class="current-stat-value-row">
-										<span class="current-stat-value" :class="{ placeholder: !appState.goal }" x-text="goalWeightLabel"></span>
-										<template x-if="appState.goal">
-											<span class="current-stat-unit" x-text="appState.unit"></span>
+										<span class="current-stat-value" :class="{ placeholder: !model.goal }" x-text="goalWeightLabel"></span>
+										<template x-if="model.goal">
+											<span class="current-stat-unit" x-text="model.unit"></span>
 										</template>
 									</span>
 									<span class="current-stat-meta" x-text="goalPanelMeta"></span>
@@ -121,9 +121,9 @@
 						<div class="chart-title-row section-title-row">
 							<div class="chart-title-label section-title-label">Trend</div>
 							<template x-if="sortedEntries.length > 0">
-								<div class="segmented chart-controls section-controls" aria-label="Choose chart zoom" :style="{ '--segment-count': zoomOptions.length, '--segment-active': Math.max(zoomOptions.indexOf(appState.zoom), 0) }">
+								<div class="segmented chart-controls section-controls" aria-label="Choose chart zoom" :style="{ '--segment-count': zoomOptions.length, '--segment-active': Math.max(zoomOptions.indexOf(model.zoom), 0) }">
 									<template x-for="zoom in zoomOptions" :key="`zoom-${zoom}`">
-										<button type="button" :class="{ active: appState.zoom === zoom }" @click="setZoom(zoom)" x-text="zoom"></button>
+										<button type="button" :class="{ active: model.zoom === zoom }" @click="setZoom(zoom)" x-text="zoom"></button>
 									</template>
 								</div>
 							</template>
@@ -196,7 +196,7 @@
 										</div>
 										<div class="history-week-value-group">
 											<span class="history-week-value" x-text="period.medianValue"></span>
-											<span class="history-week-unit" x-text="appState.unit"></span>
+											<span class="history-week-unit" x-text="model.unit"></span>
 										</div>
 									</div>
 									<button
@@ -204,7 +204,7 @@
 										type="button"
 										@click="toggleHistoryExpansion(period.periodStart)"
 										:aria-expanded="expandedHistory[period.periodStart] ? 'true' : 'false'"
-										:aria-label="(expandedHistory[period.periodStart] ? 'Collapse' : 'Expand') + ' ' + historyPeriodName + ' of ' + period.periodLabel"
+										:aria-label="historyToggleAriaLabel(period)"
 									>⌄</button>
 								</div>
 
@@ -216,12 +216,12 @@
 													:class="{ removing: !!removingIds[entry.date] }"
 													@contextmenu.prevent="openEdit(entry)">
 													<div class="history-date">
-														<div class="history-day" x-text="formatHistoryEntryLabel(entry.date) + (period.medianEntry && entry.date === period.medianEntry.date ? ' ◦' : '')"></div>
+														<div class="history-day" x-text="formatHistoryItemLabel(entry, period)"></div>
 													</div>
 													<div class="history-spacer" aria-hidden="true"></div>
 													<div class="history-value">
 														<span x-text="formatWeight(entry.weightKg)"></span>
-														<span class="history-value-unit" x-text="appState.unit"></span>
+														<span class="history-value-unit" x-text="model.unit"></span>
 													</div>
 													<button class="history-delete" type="button" aria-label="Delete entry" @click.stop="deleteEntry(entry.date)">🗑</button>
 												</li>
@@ -257,9 +257,9 @@
 						<div class="settings-action-title">Theme</div>
 						<div class="settings-action-subtitle">Select the preferred color theme.</div>
 					</div>
-					<div class="segmented compact" role="group" aria-label="Choose theme" :style="{ '--segment-count': themeOptions.length, '--segment-active': Math.max(themeOptions.indexOf(appState.themeMode), 0) }">
+					<div class="segmented compact" role="group" aria-label="Choose theme" :style="{ '--segment-count': themeOptions.length, '--segment-active': Math.max(themeOptions.indexOf(model.themeMode), 0) }">
 						<template x-for="theme in themeOptions" :key="`theme-${theme}`">
-							<button type="button" :class="{ active: appState.themeMode === theme }" @click="appState.themeMode = theme" x-text="theme"></button>
+							<button type="button" :class="{ active: model.themeMode === theme }" @click="setThemeMode(theme)" x-text="theme"></button>
 						</template>
 					</div>
 				</div>
@@ -320,15 +320,15 @@
 				<div class="sheet-handle"></div>
 				<div class="sheet-header">
 					<button class="micro-button sheet-action-button" type="button" @click="closeOverlay()">Cancel</button>
-					<div class="sheet-title" x-text="overlayMode === 'goal' ? (appState.goal ? 'Goal Weight' : 'Set Goal') : (editingDate ? 'Edit Weight' : 'New Weight')"></div>
-					<button class="micro-button sheet-action-button primary" type="button" @click="saveOverlay()" x-text="overlayMode === 'goal' && !appState.goal ? 'Set' : 'Save'"></button>
+					<div class="sheet-title" x-text="overlayTitle"></div>
+					<button class="micro-button sheet-action-button primary" type="button" @click="saveOverlay()" x-text="overlaySaveButtonLabel"></button>
 				</div>
 
 				<div class="picker">
 					<div class="picker-highlight"></div>
 					<div class="picker-wheel" x-ref="wholeWheel" @scroll.passive="onWheelScroll('whole', $el)" @wheel="onPickerWheel('whole', $event, $el)">
 						<div class="picker-spacer"></div>
-						<template x-for="value in activeWholeList" :key="`whole-${appState.unit}-${value}`">
+						<template x-for="value in activeWholeList" :key="`whole-${model.unit}-${value}`">
 							<div class="picker-item" :class="{ active: pickerWhole === value }" x-text="value"></div>
 						</template>
 						<div class="picker-spacer"></div>
@@ -341,15 +341,15 @@
 						</template>
 						<div class="picker-spacer"></div>
 					</div>
-					<div class="picker-unit" x-text="appState.unit"></div>
+					<div class="picker-unit" x-text="model.unit"></div>
 				</div>
 
 				<div class="sheet-meta">
 					<div class="sheet-field">
 						<div class="sheet-field-label">Choose Unit</div>
-						<div class="segmented sheet-unit-picker" role="group" aria-label="Choose unit" :style="{ '--segment-count': unitOptions.length, '--segment-active': Math.max(unitOptions.indexOf(appState.unit), 0) }">
+						<div class="segmented sheet-unit-picker" role="group" aria-label="Choose unit" :style="{ '--segment-count': unitOptions.length, '--segment-active': Math.max(unitOptions.indexOf(model.unit), 0) }">
 							<template x-for="unit in unitOptions" :key="`sheet-unit-${unit}`">
-								<button type="button" :class="{ active: appState.unit === unit }" @click="switchUnit(unit)" x-text="unit"></button>
+								<button type="button" :class="{ active: model.unit === unit }" @click="switchUnit(unit)" x-text="unit"></button>
 							</template>
 						</div>
 					</div>
@@ -369,12 +369,12 @@
 									</template>
 								</div>
 								<div class="goal-rate-stepper">
-									<button class="goal-rate-button" type="button" @click="changeGoalRate(-1)" :aria-label="'Lower ' + goalRateDraftUnit.toLowerCase() + ' loss rate'">−</button>
+									<button class="goal-rate-button" type="button" @click="changeGoalRate(-1)" :aria-label="goalRateStepAriaLabel(-1)">−</button>
 									<div class="goal-rate-value">
 										<div class="goal-rate-number" x-text="goalRateDraftLabel"></div>
-										<div class="goal-rate-unit" x-text="appState.unit + ' / ' + goalRateDraftUnit"></div>
+										<div class="goal-rate-unit" x-text="goalRateUnitLabel"></div>
 									</div>
-									<button class="goal-rate-button" type="button" @click="changeGoalRate(1)" :aria-label="'Raise ' + goalRateDraftUnit.toLowerCase() + ' loss rate'">+</button>
+									<button class="goal-rate-button" type="button" @click="changeGoalRate(1)" :aria-label="goalRateStepAriaLabel(1)">+</button>
 								</div>
 							</div>
 						</div>
@@ -388,7 +388,7 @@
 							</div>
 						</div>
 					</template>
-					<template x-if="overlayMode === 'goal' && appState.goal">
+					<template x-if="overlayMode === 'goal' && model.goal">
 						<div class="sheet-field full">
 							<button class="sheet-clear-button" type="button" @click="clearGoal()">Clear Goal</button>
 						</div>

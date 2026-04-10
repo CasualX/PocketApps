@@ -1,57 +1,31 @@
-const VERSION = '1.0';
-const STORAGE_KEY = 'feather-weight-data' + window.location.hash;
+import {
+	VERSION,
+	KG_TO_LBS,
+	UNIT_OPTIONS,
+	ZOOM_OPTIONS,
+	VIEW_OPTIONS,
+	THEME_OPTIONS,
+	createApp,
+	generateDemoEntries,
+	isoDateToDate,
+	todayIsoDate,
+	dateToDayNumber,
+	dayNumberToDate,
+	dayNumberToIsoDate,
+	startOfWeek,
+	startOfMonth,
+	shiftDate,
+} from './app.js';
 
-const KG_TO_LBS = 2.2046226218;
-
-const UNIT_OPTIONS = Object.freeze(['KG', 'LBS']);
-const ZOOM_OPTIONS = Object.freeze(['Week', 'Month', 'Year']);
-const VIEW_OPTIONS = Object.freeze(['Week', 'Month']);
-const THEME_OPTIONS = Object.freeze(['auto', 'light', 'dark']);
+const STORAGE_KEY = 'feather-weight-data';
 const THEME_COLORS = Object.freeze({ light: '#f7f4ec', dark: '#131618' });
+const WHOLE_KG_VALUES = Object.freeze(Array.from({ length: 101 }, (_, index) => index + 20));
+const WHOLE_LBS_VALUES = Object.freeze(Array.from({ length: 223 }, (_, index) => index + 44));
+const DECIMALS = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
-function defaultAppState() {
+function featherWeightViewModel() {
 	return {
-		version: VERSION,
-		themeMode: 'auto',
-		unit: 'KG',
-		historyView: 'Week',
-		zoom: 'Month',
-		goal: null,
-		entries: {}
-	};
-}
-
-function normalizeAppState(saved) {
-	let defaults = defaultAppState();
-
-	let themeMode = THEME_OPTIONS.includes(saved.themeMode) ? saved.themeMode : defaults.themeMode;
-	let unit = UNIT_OPTIONS.includes(saved.unit) ? saved.unit : defaults.unit;
-	let historyView = VIEW_OPTIONS.includes(saved.historyView) ? saved.historyView : defaults.historyView;
-	let zoom = ZOOM_OPTIONS.includes(saved.zoom) ? saved.zoom : defaults.zoom;
-
-	let goal = null;
-	if (saved.goal && typeof saved.goal === 'object' && typeof saved.goal.weightKg === 'number') {
-		let weightKg = saved.goal.weightKg;
-		let rateKg = typeof saved.goal.rateKg === 'number' && Number.isFinite(saved.goal.rateKg) ? saved.goal.rateKg : 0.5;
-		let rateUnit = VIEW_OPTIONS.includes(saved.goal.rateUnit) ? saved.goal.rateUnit : 'Week';
-		goal = { weightKg, rateKg, rateUnit };
-	}
-
-	let entries = {};
-	if (saved.entries && typeof saved.entries === 'object') {
-		entries = Object.fromEntries(
-			Object.entries(saved.entries).filter(([date, weightKg]) => {
-				return /^\d{4}-\d{2}-\d{2}$/.test(date) && typeof weightKg === 'number' && Number.isFinite(weightKg);
-			})
-		);
-	}
-
-	return { version: VERSION, themeMode, unit, historyView, zoom, goal, entries };
-}
-
-function featherWeightApp() {
-	return {
-		appState: defaultAppState(),
+		model: createApp(),
 		storageLocked: false,
 		viewportWidth: window.innerWidth,
 		unitOptions: UNIT_OPTIONS,
@@ -89,7 +63,7 @@ function featherWeightApp() {
 				xLabels: [],
 				valueLabels: [],
 				path: '',
-				points: []
+				points: [],
 			},
 			yAxisMarkup: '',
 			horizontalMinorGridMarkup: '',
@@ -98,18 +72,14 @@ function featherWeightApp() {
 			verticalMajorGridMarkup: '',
 			valueLabelsMarkup: '',
 			pointsMarkup: '',
-			xLabelsMarkup: ''
+			xLabelsMarkup: '',
 		},
 		settingsOpen: false,
-		wholeKg: Array.from({ length: 101 }, (_, index) => index + 20),
-		wholeLbs: Array.from({ length: 223 }, (_, index) => index + 44),
-		decimals: Array.from({ length: 10 }, (_, index) => index),
+		decimals: DECIMALS,
 
 		init() {
 			if (window.location.hash === '#demo') {
-				let appState = defaultAppState();
-				appState.entries = this.generateDemoEntries();
-				this.appState = appState;
+				this.model = createApp({ entries: generateDemoEntries() });
 				this.storageLocked = true;
 				this.resetHistoryView();
 			}
@@ -120,15 +90,15 @@ function featherWeightApp() {
 				this.restore();
 			}
 			this.applyTheme();
-			this.$watch('appState.themeMode', () => {
+			this.$watch('model.themeMode', () => {
 				this.applyTheme();
 				this.persist();
 			});
-			this.$watch('appState.unit', () => {
+			this.$watch('model.unit', () => {
 				this.refreshChartRender();
 				this.persist();
 			});
-			this.$watch('appState.zoom', () => {
+			this.$watch('model.zoom', () => {
 				this.refreshChartRender();
 				this.persist();
 				this.$nextTick(() => {
@@ -162,7 +132,7 @@ function featherWeightApp() {
 				if (saved.version !== VERSION) {
 					throw new Error('Invalid version');
 				}
-				this.appState = normalizeAppState(saved);
+				this.model = createApp(saved);
 			}
 			catch (error) {
 				this.storageLocked = true;
@@ -174,15 +144,11 @@ function featherWeightApp() {
 			if (this.storageLocked) {
 				return;
 			}
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(this.appState));
-		},
-
-		convertWeightKg(weightKg) {
-			return this.appState.unit === 'KG' ? weightKg : weightKg * KG_TO_LBS;
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(this.model.toJSON()));
 		},
 
 		applyTheme() {
-			let resolvedTheme = this.data.themeMode;
+			let resolvedTheme = this.model.themeMode;
 			if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') {
 				resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 			}
@@ -199,72 +165,42 @@ function featherWeightApp() {
 		},
 
 		resolvedTheme() {
-			if (this.appState.themeMode === 'light' || this.appState.themeMode === 'dark') {
-				return this.appState.themeMode;
+			if (this.model.themeMode === 'light' || this.model.themeMode === 'dark') {
+				return this.model.themeMode;
 			}
 			return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 		},
 
 		switchUnit(nextUnit) {
-			if (nextUnit === this.appState.unit) {
+			if (nextUnit === this.model.unit) {
 				return;
 			}
 			if (this.overlayOpen) {
 				let currentKg = this.selectedPickerKg();
-				this.appState.unit = nextUnit;
+				this.model.setUnit(nextUnit);
 				this.$nextTick(() => {
 					this.setPickerFromKg(currentKg);
 					this.syncPickerScroll();
 				});
 				return;
 			}
-			this.appState.unit = nextUnit;
+			this.model.setUnit(nextUnit);
 		},
 
 		setZoom(level) {
-			this.appState.zoom = level;
-		},
-
-		isoDateFromDate(date) {
-			let year = date.getFullYear();
-			let month = String(date.getMonth() + 1).padStart(2, '0');
-			let day = String(date.getDate()).padStart(2, '0');
-			return `${year}-${month}-${day}`;
-		},
-
-		isoDateToDate(dateValue) {
-			let [year, month, day] = String(dateValue).split('-').map(Number);
-			return new Date(year, month - 1, day);
-		},
-
-		todayIsoDate() {
-			return this.isoDateFromDate(new Date());
-		},
-
-		dateToDayNumber(dateValue) {
-			let [year, month, day] = String(dateValue).split('-').map(Number);
-			return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
-		},
-
-		dayNumberToDate(dayNumber) {
-			let utcDate = new Date(dayNumber * 86400000);
-			return new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate());
-		},
-
-		dayNumberToIsoDate(dayNumber) {
-			return this.isoDateFromDate(this.dayNumberToDate(dayNumber));
+			this.model.setZoom(level);
 		},
 
 		selectedPickerKg() {
 			let selected = this.pickerWhole + this.pickerDecimal / 10;
-			return this.appState.unit === 'KG' ? selected : selected / KG_TO_LBS;
+			return this.model.unit === 'KG' ? selected : selected / KG_TO_LBS;
 		},
 
 		formatWeight(weightKg, digits = 1) {
 			if (typeof weightKg !== 'number' || !Number.isFinite(weightKg)) {
 				return '--.-';
 			}
-			return this.convertWeightKg(weightKg).toFixed(digits);
+			return this.model.convertWeightKg(weightKg).toFixed(digits);
 		},
 
 		formatAxisValue(value) {
@@ -272,10 +208,10 @@ function featherWeightApp() {
 		},
 
 		formatDate(dateValue) {
-			return this.isoDateToDate(dateValue).toLocaleDateString(undefined, {
+			return isoDateToDate(dateValue).toLocaleDateString(undefined, {
 				month: 'short',
 				day: 'numeric',
-				year: 'numeric'
+				year: 'numeric',
 			});
 		},
 
@@ -283,28 +219,33 @@ function featherWeightApp() {
 			return new Date().toLocaleDateString(undefined, {
 				weekday: 'long',
 				month: 'long',
-				day: 'numeric'
+				day: 'numeric',
 			});
 		},
 
 		formatWeekLabel(dateValue) {
-			return this.isoDateToDate(dateValue).toLocaleDateString(undefined, {
+			return isoDateToDate(dateValue).toLocaleDateString(undefined, {
 				month: 'long',
-				day: 'numeric'
+				day: 'numeric',
 			});
 		},
 
 		formatMonthLabel(dateValue) {
-			return this.isoDateToDate(dateValue).toLocaleDateString(undefined, {
+			return isoDateToDate(dateValue).toLocaleDateString(undefined, {
 				month: 'long',
-				year: 'numeric'
+				year: 'numeric',
 			});
 		},
 
 		formatHistoryEntryLabel(dateValue) {
-			let date = this.isoDateToDate(dateValue);
+			let date = isoDateToDate(dateValue);
 			let weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
 			return `${weekday} ${this.ordinalDay(date.getDate())}`;
+		},
+
+		formatHistoryItemLabel(entry, period) {
+			let label = this.formatHistoryEntryLabel(entry.date);
+			return period.medianEntry && entry.date === period.medianEntry.date ? `${label} ◦` : label;
 		},
 
 		ordinalDay(day) {
@@ -326,7 +267,7 @@ function featherWeightApp() {
 		},
 
 		lastRecordedDateLabel(dateValue) {
-			let dayDiff = this.dateToDayNumber(this.todayIsoDate()) - this.dateToDayNumber(dateValue);
+			let dayDiff = dateToDayNumber(todayIsoDate()) - dateToDayNumber(dateValue);
 			if (dayDiff <= 0) {
 				return 'From today';
 			}
@@ -343,13 +284,13 @@ function featherWeightApp() {
 		},
 
 		formatDeltaParts(deltaKg) {
-			let converted = this.convertWeightKg(deltaKg);
+			let converted = this.model.convertWeightKg(deltaKg);
 			let rounded = Math.abs(converted) < 0.05 ? 0 : Number(converted.toFixed(1));
 			let number = `${rounded > 0 ? '+' : ''}${rounded.toFixed(1)}`;
 			return {
 				number,
-				unit: this.appState.unit,
-				tone: rounded > 0 ? 'negative' : rounded < 0 ? 'positive' : 'neutral'
+				unit: this.model.unit,
+				tone: rounded > 0 ? 'negative' : rounded < 0 ? 'positive' : 'neutral',
 			};
 		},
 
@@ -358,20 +299,12 @@ function featherWeightApp() {
 				label,
 				valueNumber: '--',
 				valueUnit: '',
-				tone: 'neutral'
+				tone: 'neutral',
 			};
 		},
 
-		setEntryDate(dateValue) {
-			this.entryDate = dateValue;
-		},
-
-		goalRateUnit(goal = this.appState.goal) {
-			return goal?.rateUnit === 'Month' ? 'Month' : 'Week';
-		},
-
-		goalRateValue(goal = this.appState.goal) {
-			return typeof goal?.rateKg === 'number' ? goal.rateKg : 0.5;
+		setThemeMode(theme) {
+			this.model.setTheme(theme);
 		},
 
 		formatRateLabel(rateKg, rateUnit = 'Week') {
@@ -385,7 +318,7 @@ function featherWeightApp() {
 		},
 
 		rateStepKg() {
-			return this.appState.unit === 'KG' ? 0.1 : 0.1 / KG_TO_LBS;
+			return this.model.unit === 'KG' ? 0.1 : 0.1 / KG_TO_LBS;
 		},
 
 		changeGoalRate(direction) {
@@ -398,198 +331,24 @@ function featherWeightApp() {
 			this.goalRateDraftUnit = rateUnit === 'Month' ? 'Month' : 'Week';
 		},
 
-		generateDemoEntries() {
-			let generated = {};
-			let totalDays = 365 * 4;
-			let start = new Date();
-			start.setHours(0, 0, 0, 0);
-			start.setDate(start.getDate() - totalDays);
-			let weight = 72 + (Math.random() - 0.5) * 8;
-			for (let dayIndex = 0; dayIndex <= totalDays; dayIndex += 1) {
-				if (Math.random() > 0.5) {
-					continue;
-				}
-				weight += (Math.random() - 0.5) * 0.42;
-				weight += (72 - weight) * 0.015;
-				weight = Math.max(54, Math.min(108, weight));
-				let entryDate = new Date(start);
-				entryDate.setDate(start.getDate() + dayIndex);
-				generated[this.isoDateFromDate(entryDate)] = Number(weight.toFixed(1));
-			}
-			if (!generated[this.todayIsoDate()]) {
-				generated[this.todayIsoDate()] = Number(weight.toFixed(1));
-			}
-			return generated;
+		buildPeriodHistory(periods, formatLabel) {
+			return periods.map((period) => ({
+				...period,
+				periodLabel: formatLabel(period.periodStart),
+				medianValue: period.medianEntry ? this.formatWeight(period.medianEntry.weightKg) : '--.-',
+				delta: typeof period.deltaKg === 'number' ? this.formatDeltaParts(period.deltaKg) : null,
+			}));
 		},
 
-		startOfWeek(dateValue) {
-			let date = this.isoDateToDate(dateValue);
-			let offset = (date.getDay() + 6) % 7;
-			date.setDate(date.getDate() - offset);
-			return this.isoDateFromDate(date);
-		},
-
-		startOfMonth(dateValue) {
-			let date = this.isoDateToDate(dateValue);
-			date.setDate(1);
-			return this.isoDateFromDate(date);
-		},
-
-		shiftDate(dateValue, unit, amount) {
-			let next = this.isoDateToDate(dateValue);
-			if (unit === 'day') {
-				next.setDate(next.getDate() + amount);
-			}
-			else if (unit === 'week') {
-				next.setDate(next.getDate() + amount * 7);
-			}
-			else if (unit === 'month') {
-				next.setMonth(next.getMonth() + amount);
-			}
-			return this.isoDateFromDate(next);
-		},
-
-		weightKgAtDate(dateValue) {
-			let entries = this.sortedEntries;
-			if (!entries.length) {
-				return null;
-			}
-
-			let exactWeight = this.appState.entries[dateValue];
-			if (typeof exactWeight === 'number') {
-				return exactWeight;
-			}
-
-			let targetDayNumber = this.dateToDayNumber(dateValue);
-			let firstDayNumber = this.dateToDayNumber(entries[0].date);
-			let lastDayNumber = this.dateToDayNumber(entries[entries.length - 1].date);
-			if (targetDayNumber < firstDayNumber || targetDayNumber > lastDayNumber) {
-				return null;
-			}
-
-			for (let index = 1; index < entries.length; index += 1) {
-				let previousEntry = entries[index - 1];
-				let nextEntry = entries[index];
-				let previousDayNumber = this.dateToDayNumber(previousEntry.date);
-				let nextDayNumber = this.dateToDayNumber(nextEntry.date);
-
-				if (targetDayNumber < previousDayNumber || targetDayNumber > nextDayNumber) {
-					continue;
-				}
-
-				let daySpan = nextDayNumber - previousDayNumber;
-				if (daySpan === 0) {
-					return previousEntry.weightKg;
-				}
-
-				let progress = (targetDayNumber - previousDayNumber) / daySpan;
-				return previousEntry.weightKg + (nextEntry.weightKg - previousEntry.weightKg) * progress;
-			}
-
-			return null;
-		},
-
-		previousWeekAnchor(dateValue) {
-			return this.shiftDate(dateValue, 'week', -1);
-		},
-
-		buildDeltaSummary(primaryLabel, baselineDate) {
-			let latest = this.lastEntry;
-			if (!latest) {
-				return this.emptyDeltaSummary(primaryLabel);
-			}
-
-			let baselineWeightKg = this.weightKgAtDate(baselineDate);
-			if (baselineWeightKg === null) {
-				return this.emptyDeltaSummary(primaryLabel);
-			}
-
-			let delta = this.formatDeltaParts(latest.weightKg - baselineWeightKg);
-
-			return {
-				label: primaryLabel,
-				valueNumber: delta.number,
-				valueUnit: delta.unit,
-				tone: delta.tone,
-			};
-		},
-
-		averageWeightKgForDayRange(startDayNumber, endDayNumber) {
-			if (endDayNumber < startDayNumber) {
-				return null;
-			}
-
-			let totalWeightKg = 0;
-			let sampleCount = 0;
-			for (let dayNumber = startDayNumber; dayNumber <= endDayNumber; dayNumber += 1) {
-				let weightKg = this.weightKgAtDate(this.dayNumberToIsoDate(dayNumber));
-				if (weightKg === null) {
-					continue;
-				}
-				totalWeightKg += weightKg;
-				sampleCount += 1;
-			}
-
-			if (sampleCount === 0) {
-				return null;
-			}
-
-			return totalWeightKg / sampleCount;
-		},
-
-		medianEntryForPeriod(entries) {
-			if (!entries.length) {
-				return null;
-			}
-			let sortedByWeight = [...entries].sort((left, right) => {
-				if (left.weightKg !== right.weightKg) {
-					return left.weightKg - right.weightKg;
-				}
-				return left.date.localeCompare(right.date);
-			});
-			return sortedByWeight[Math.floor((sortedByWeight.length - 1) / 2)];
-		},
-
-		buildPeriodHistory(getPeriodStart, shiftUnit, formatLabel) {
-			let periodsByStart = new Map();
-			for (let entry of this.sortedEntries) {
-				let periodStart = getPeriodStart(entry.date);
-				let bucket = periodsByStart.get(periodStart) || [];
-				bucket.push(entry);
-				periodsByStart.set(periodStart, bucket);
-			}
-
-			let periods = Array.from(periodsByStart.entries())
-				.sort((left, right) => right[0].localeCompare(left[0]))
-				.map(([periodStart, entries]) => {
-					let sortedEntries = [...entries].sort((left, right) => left.date.localeCompare(right.date));
-					let medianEntry = this.medianEntryForPeriod(sortedEntries);
-					return {
-						periodStart,
-						entries: sortedEntries,
-						medianEntry,
-						entryCount: sortedEntries.length
-					};
-				});
-
-			let periodLookup = new Map(periods.map((period) => [period.periodStart, period]));
-			return periods.map((period) => {
-				let previousPeriod = periodLookup.get(this.shiftDate(period.periodStart, shiftUnit, -1));
-				return {
-					...period,
-					periodLabel: formatLabel(period.periodStart),
-					medianValue: period.medianEntry ? this.formatWeight(period.medianEntry.weightKg) : '--.-',
-					delta: previousPeriod && previousPeriod.medianEntry
-						? this.formatDeltaParts(period.medianEntry.weightKg - previousPeriod.medianEntry.weightKg)
-						: null
-				};
-			});
+		historyToggleAriaLabel(period) {
+			let action = this.expandedHistory[period.periodStart] ? 'Collapse' : 'Expand';
+			return `${action} ${this.historyPeriodName} of ${period.periodLabel}`;
 		},
 
 		toggleHistoryExpansion(periodStart) {
 			this.expandedHistory = {
 				...this.expandedHistory,
-				[periodStart]: !this.expandedHistory[periodStart]
+				[periodStart]: !this.expandedHistory[periodStart],
 			};
 		},
 
@@ -599,10 +358,10 @@ function featherWeightApp() {
 
 		setHistoryView(historyView) {
 			let nextView = historyView === 'Month' ? 'Month' : 'Week';
-			if (this.appState.historyView === nextView) {
+			if (this.model.historyView === nextView) {
 				return;
 			}
-			this.appState.historyView = nextView;
+			this.model.setHistoryView(nextView);
 			this.resetHistoryView();
 			this.persist();
 		},
@@ -613,10 +372,10 @@ function featherWeightApp() {
 		},
 
 		formatTimeTickLabel(date) {
-			if (this.appState.zoom === 'Week') {
+			if (this.model.zoom === 'Week') {
 				return date.toLocaleDateString(undefined, { weekday: 'short' });
 			}
-			if (this.appState.zoom === 'Month') {
+			if (this.model.zoom === 'Month') {
 				return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 			}
 			let month = date.toLocaleDateString(undefined, { month: 'short' });
@@ -626,19 +385,19 @@ function featherWeightApp() {
 		buildYearTicks(minDayNumber, maxDayNumber, xForDayNumber) {
 			let major = [];
 			let minor = [];
-			let monthStart = this.startOfMonth(this.dayNumberToIsoDate(minDayNumber));
-			let lastBoundary = this.shiftDate(this.startOfMonth(this.dayNumberToIsoDate(maxDayNumber)), 'month', 1);
+			let monthStart = startOfMonth(dayNumberToIsoDate(minDayNumber));
+			let lastBoundary = shiftDate(startOfMonth(dayNumberToIsoDate(maxDayNumber)), 'month', 1);
 
 			while (monthStart <= lastBoundary) {
-				let currentDayNumber = this.dateToDayNumber(monthStart);
-				let nextMonth = this.shiftDate(monthStart, 'month', 1);
-				let nextDayNumber = this.dateToDayNumber(nextMonth);
+				let currentDayNumber = dateToDayNumber(monthStart);
+				let nextMonth = shiftDate(monthStart, 'month', 1);
+				let nextDayNumber = dateToDayNumber(nextMonth);
 
 				if (currentDayNumber >= minDayNumber && currentDayNumber <= maxDayNumber) {
 					major.push({
 						dayNumber: currentDayNumber,
 						x: xForDayNumber(currentDayNumber),
-						label: this.formatTimeTickLabel(this.isoDateToDate(monthStart))
+						label: this.formatTimeTickLabel(isoDateToDate(monthStart)),
 					});
 				}
 
@@ -647,7 +406,7 @@ function featherWeightApp() {
 					if (dayNumber >= minDayNumber && dayNumber <= maxDayNumber) {
 						minor.push({
 							dayNumber,
-							x: xForDayNumber(dayNumber)
+							x: xForDayNumber(dayNumber),
 						});
 					}
 				}
@@ -659,35 +418,35 @@ function featherWeightApp() {
 		},
 
 		buildTimeTicks(minDayNumber, maxDayNumber, xForDayNumber) {
-			if (this.appState.zoom === 'Year') {
+			if (this.model.zoom === 'Year') {
 				return this.buildYearTicks(minDayNumber, maxDayNumber, xForDayNumber);
 			}
 
 			let major = [];
 			let minor = [];
 
-			if (this.appState.zoom === 'Week') {
+			if (this.model.zoom === 'Week') {
 				for (let dayNumber = minDayNumber; dayNumber <= maxDayNumber; dayNumber += 1) {
 					major.push({
 						dayNumber,
 						x: xForDayNumber(dayNumber),
-						label: this.formatTimeTickLabel(this.dayNumberToDate(dayNumber))
+						label: this.formatTimeTickLabel(dayNumberToDate(dayNumber)),
 					});
 				}
 				return { major, minor };
 			}
 
-			let majorCursor = this.startOfWeek(this.dayNumberToIsoDate(minDayNumber));
-			while (this.dateToDayNumber(majorCursor) <= maxDayNumber) {
-				let dayNumber = this.dateToDayNumber(majorCursor);
+			let majorCursor = startOfWeek(dayNumberToIsoDate(minDayNumber));
+			while (dateToDayNumber(majorCursor) <= maxDayNumber) {
+				let dayNumber = dateToDayNumber(majorCursor);
 				if (dayNumber >= minDayNumber && dayNumber <= maxDayNumber) {
 					major.push({
 						dayNumber,
 						x: xForDayNumber(dayNumber),
-						label: this.formatTimeTickLabel(this.isoDateToDate(majorCursor))
+						label: this.formatTimeTickLabel(isoDateToDate(majorCursor)),
 					});
 				}
-				majorCursor = this.shiftDate(majorCursor, 'week', 1);
+				majorCursor = shiftDate(majorCursor, 'week', 1);
 			}
 
 			let majorDayNumbers = new Set(major.map((tick) => tick.dayNumber));
@@ -695,7 +454,7 @@ function featherWeightApp() {
 				if (!majorDayNumbers.has(dayNumber)) {
 					minor.push({
 						dayNumber,
-						x: xForDayNumber(dayNumber)
+						x: xForDayNumber(dayNumber),
 					});
 				}
 			}
@@ -704,32 +463,25 @@ function featherWeightApp() {
 		},
 
 		get sortedEntries() {
-			return Object.keys(this.appState.entries)
-				.sort((left, right) => left.localeCompare(right))
-				.map((date) => ({
-					date,
-					weightKg: this.appState.entries[date]
-				}));
+			return this.model.sortedEntries;
 		},
 
 		get weeklySummaryHistory() {
 			return this.buildPeriodHistory(
-				(dateValue) => this.startOfWeek(dateValue),
-				'week',
+				this.model.weeklyHistory,
 				(dateValue) => this.formatWeekLabel(dateValue)
 			);
 		},
 
 		get monthlyHistory() {
 			return this.buildPeriodHistory(
-				(dateValue) => this.startOfMonth(dateValue),
-				'month',
+				this.model.monthlyHistory,
 				(dateValue) => this.formatMonthLabel(dateValue)
 			);
 		},
 
 		get activeHistoryView() {
-			return this.appState.historyView === 'Month' ? 'Month' : 'Week';
+			return this.model.historyView === 'Month' ? 'Month' : 'Week';
 		},
 
 		get activeHistory() {
@@ -749,7 +501,7 @@ function featherWeightApp() {
 		},
 
 		get lastEntry() {
-			return this.sortedEntries[this.sortedEntries.length - 1] || null;
+			return this.model.lastEntry;
 		},
 
 		get currentWeightLabel() {
@@ -763,52 +515,49 @@ function featherWeightApp() {
 		},
 
 		get goalWeightLabel() {
-			if (!this.appState.goal || typeof this.appState.goal.weightKg !== 'number') {
+			if (!this.model.goal || typeof this.model.goal.weightKg !== 'number') {
 				return '--.-';
 			}
-			return this.formatWeight(this.appState.goal.weightKg);
+			return this.formatWeight(this.model.goal.weightKg);
 		},
 
 		get goalRateDraftLabel() {
 			return this.formatWeight(this.goalRateDraftKg);
 		},
 
+		get goalRateUnitLabel() {
+			return `${this.model.unit} / ${this.goalRateDraftUnit}`;
+		},
+
 		get goalPeriodsRemaining() {
-			if (!this.appState.goal || !this.lastEntry) {
-				return null;
-			}
-
-			let remainingKg = this.lastEntry.weightKg - this.appState.goal.weightKg;
-			if (remainingKg <= 0) {
-				return 0;
-			}
-
-			return Math.ceil(remainingKg / this.goalRateValue());
+			return this.model.goalStatus()?.periodsRemaining ?? null;
 		},
 
 		get goalPanelMeta() {
-			if (!this.appState.goal) {
+			let goalStatus = this.model.goalStatus();
+			if (!goalStatus) {
 				return '';
 			}
 
-			let rateUnit = this.goalRateUnit();
-			let rateLabel = this.formatRateLabel(this.goalRateValue(), rateUnit);
-			if (!this.lastEntry) {
+			let rateLabel = this.formatRateLabel(goalStatus.rateKg, goalStatus.rateUnit);
+			if (goalStatus.currentWeightKg === null) {
 				return rateLabel;
 			}
 
-			if (this.goalPeriodsRemaining === 0) {
+			if (goalStatus.reached) {
 				return `${rateLabel} · reached`;
 			}
 
-			return `${rateLabel} · ${this.formatGoalPeriodsLabel(this.goalPeriodsRemaining, rateUnit)}`;
+			return goalStatus.periodsRemaining === null
+				? rateLabel
+				: `${rateLabel} · ${this.formatGoalPeriodsLabel(goalStatus.periodsRemaining, goalStatus.rateUnit)}`;
 		},
 
 		get goalPreview() {
 			if (!this.lastEntry) {
 				return {
 					title: 'Add a weight first',
-					detail: 'The forecast starts once you have a current measurement.'
+					detail: 'The forecast starts once you have a current measurement.',
 				};
 			}
 
@@ -817,25 +566,36 @@ function featherWeightApp() {
 			if (remainingKg <= 0) {
 				return {
 					title: 'Goal already reached',
-					detail: `Current weight is already at or below ${this.formatWeight(targetWeightKg)} ${this.appState.unit.toLowerCase()}.`
+					detail: `Current weight is already at or below ${this.formatWeight(targetWeightKg)} ${this.model.unit.toLowerCase()}.`,
 				};
 			}
 
 			let periods = Math.ceil(remainingKg / this.goalRateDraftKg);
 			return {
 				title: `About ${periods} ${this.goalRateDraftUnit === 'Month' ? `month${periods === 1 ? '' : 's'}` : `week${periods === 1 ? '' : 's'}`} left`,
-				detail: `${this.formatWeight(remainingKg)} ${this.appState.unit.toLowerCase()} to lose at ${this.formatRateLabel(this.goalRateDraftKg, this.goalRateDraftUnit)}.`
+				detail: `${this.formatWeight(remainingKg)} ${this.model.unit.toLowerCase()} to lose at ${this.formatRateLabel(this.goalRateDraftKg, this.goalRateDraftUnit)}.`,
 			};
 		},
 
-		get lastWeekDeltaCard() {
-			if (!this.lastEntry) {
-				let baselineDate = this.todayIsoDate();
-				return this.buildDeltaSummary('Since last week', baselineDate);
-			}
+		goalRateStepAriaLabel(direction) {
+			let action = direction < 0 ? 'Lower' : 'Raise';
+			return `${action} ${this.goalRateDraftUnit.toLowerCase()} loss rate`;
+		},
 
-			let currentWeek = this.weeklySummaryHistory[0];
-			if (!currentWeek || !currentWeek.delta) {
+		get overlayTitle() {
+			if (this.overlayMode === 'goal') {
+				return this.model.goal ? 'Goal Weight' : 'Set Goal';
+			}
+			return this.editingDate ? 'Edit Weight' : 'New Weight';
+		},
+
+		get overlaySaveButtonLabel() {
+			return this.overlayMode === 'goal' && !this.model.goal ? 'Set' : 'Save';
+		},
+
+		get lastWeekDeltaCard() {
+			let weeklyChange = this.model.sinceLastWeekChange();
+			if (!weeklyChange) {
 				return {
 					label: 'Since last week',
 					valueNumber: '--',
@@ -844,28 +604,22 @@ function featherWeightApp() {
 				};
 			}
 
+			let delta = this.formatDeltaParts(weeklyChange.deltaKg);
 			return {
 				label: 'Since last week',
-				valueNumber: currentWeek.delta.number,
-				valueUnit: currentWeek.delta.unit,
-				tone: currentWeek.delta.tone,
+				valueNumber: delta.number,
+				valueUnit: delta.unit,
+				tone: delta.tone,
 			};
 		},
 
 		get lastMonthDeltaCard() {
-			let latest = this.lastEntry;
-			if (!latest) {
+			let trend = this.model.thirtyDayTrend();
+			if (!trend) {
 				return this.emptyDeltaSummary('30-day trend');
 			}
 
-			let latestDayNumber = this.dateToDayNumber(latest.date);
-			let currentAverageKg = this.averageWeightKgForDayRange(latestDayNumber - 29, latestDayNumber);
-			let previousAverageKg = this.averageWeightKgForDayRange(latestDayNumber - 59, latestDayNumber - 30);
-			if (currentAverageKg === null || previousAverageKg === null) {
-				return this.emptyDeltaSummary('30-day trend');
-			}
-
-			let delta = this.formatDeltaParts(currentAverageKg - previousAverageKg);
+			let delta = this.formatDeltaParts(trend.deltaKg);
 			return {
 				label: '30-day trend',
 				valueNumber: delta.number,
@@ -874,22 +628,8 @@ function featherWeightApp() {
 			};
 		},
 
-		get chartEntries() {
-			let entries = this.sortedEntries;
-			if (!entries.length || this.appState.zoom === 'Year') {
-				return entries;
-			}
-
-			let latestDate = entries[entries.length - 1].date;
-			let cutoff = this.appState.zoom === 'Week'
-				? this.shiftDate(this.startOfWeek(latestDate), 'week', -15)
-				: this.shiftDate(this.startOfMonth(latestDate), 'month', -11);
-
-			return entries.filter((entry) => entry.date >= cutoff);
-		},
-
 		get activeWholeList() {
-			return this.appState.unit === 'KG' ? this.wholeKg : this.wholeLbs;
+			return this.model.unit === 'KG' ? WHOLE_KG_VALUES : WHOLE_LBS_VALUES;
 		},
 
 		emptyChartModel() {
@@ -910,7 +650,7 @@ function featherWeightApp() {
 				xLabels: [],
 				valueLabels: [],
 				path: '',
-				points: []
+				points: [],
 			};
 		},
 
@@ -922,24 +662,24 @@ function featherWeightApp() {
 			const PAD_RIGHT = 14;
 			const PAD_BOTTOM = 34;
 			const PAD_LEFT = 8;
-			let entries = this.chartEntries;
+			let entries = this.model.chartEntries;
 			if (!entries.length) {
 				return this.emptyChartModel();
 			}
 
-			let minDayNumber = this.dateToDayNumber(entries[0].date);
-			let maxDayNumber = this.dateToDayNumber(entries[entries.length - 1].date);
+			let minDayNumber = dateToDayNumber(entries[0].date);
+			let maxDayNumber = dateToDayNumber(entries[entries.length - 1].date);
 			let spanDays = Math.max(maxDayNumber - minDayNumber, 1);
-			let pixelsPerDay = this.appState.zoom === 'Week' ? 56 : this.appState.zoom === 'Month' ? 16 : 4.6;
+			let pixelsPerDay = this.model.zoom === 'Week' ? 56 : this.model.zoom === 'Month' ? 16 : 4.6;
 			let width = Math.max(fallbackWidth, Math.round(spanDays * pixelsPerDay) + PAD_LEFT + PAD_RIGHT + 20);
-			let rawWeights = entries.map((entry) => this.convertWeightKg(entry.weightKg));
+			let rawWeights = entries.map((entry) => this.model.convertWeightKg(entry.weightKg));
 			let minimum = Math.min(...rawWeights);
 			let maximum = Math.max(...rawWeights);
 			let majorYStep = 1;
-			let valuePadding = Math.max((maximum - minimum) * 0.18, this.appState.unit === 'KG' ? 0.6 : 1.2);
+			let valuePadding = Math.max((maximum - minimum) * 0.18, this.model.unit === 'KG' ? 0.6 : 1.2);
 			let lowerBound = Math.floor(minimum - valuePadding);
 			let upperBound = Math.ceil(maximum + valuePadding);
-			let minimumVisibleSpan = this.appState.unit === 'KG' ? 3 : 4;
+			let minimumVisibleSpan = this.model.unit === 'KG' ? 3 : 4;
 			let boundedSpan = upperBound - lowerBound;
 			if (boundedSpan < minimumVisibleSpan) {
 				let missingSpan = minimumVisibleSpan - boundedSpan;
@@ -956,8 +696,8 @@ function featherWeightApp() {
 				: PAD_LEFT + ((dayNumber - minDayNumber) / Math.max(maxDayNumber - minDayNumber, 1)) * plotWidth;
 
 			let points = entries.map((entry) => {
-				let dayNumber = this.dateToDayNumber(entry.date);
-				let value = this.convertWeightKg(entry.weightKg);
+				let dayNumber = dateToDayNumber(entry.date);
+				let value = this.model.convertWeightKg(entry.weightKg);
 				let x = xForDayNumber(dayNumber);
 				let y = PAD_TOP + (1 - ((value - lowerBound) / valueSpan)) * plotHeight;
 				return { date: entry.date, dayNumber, value, x, y };
@@ -968,7 +708,7 @@ function featherWeightApp() {
 			for (let value = lowerBound; value <= upperBound + 0.001; value += majorYStep) {
 				yTicksMajor.push({
 					value: this.formatAxisValue(value),
-					y: PAD_TOP + (1 - ((value - lowerBound) / valueSpan)) * plotHeight
+					y: PAD_TOP + (1 - ((value - lowerBound) / valueSpan)) * plotHeight,
 				});
 			}
 			let yTicksMinor = [];
@@ -978,7 +718,7 @@ function featherWeightApp() {
 					for (let division = 1; division < minorDivisions; division += 1) {
 						let value = majorValue + division * minorYStep;
 						yTicksMinor.push({
-							y: PAD_TOP + (1 - ((value - lowerBound) / valueSpan)) * plotHeight
+							y: PAD_TOP + (1 - ((value - lowerBound) / valueSpan)) * plotHeight,
 						});
 					}
 				}
@@ -991,12 +731,12 @@ function featherWeightApp() {
 			let maximumLabelY = height - PAD_BOTTOM - 11;
 
 			for (let label of timeTicks.major) {
-				let weightKg = this.weightKgAtDate(this.dayNumberToIsoDate(label.dayNumber));
+				let weightKg = this.model.weightKgAtDate(dayNumberToIsoDate(label.dayNumber));
 				if (weightKg === null) {
 					continue;
 				}
 
-				let lineY = PAD_TOP + (1 - ((this.convertWeightKg(weightKg) - lowerBound) / valueSpan)) * plotHeight;
+				let lineY = PAD_TOP + (1 - ((this.model.convertWeightKg(weightKg) - lowerBound) / valueSpan)) * plotHeight;
 				let segmentStart = points[0];
 				let segmentEnd = points[points.length - 1];
 
@@ -1029,7 +769,7 @@ function featherWeightApp() {
 				valueLabels.push({
 					x: label.x,
 					y: labelY,
-					text: this.formatWeight(weightKg)
+					text: this.formatWeight(weightKg),
 				});
 			}
 
@@ -1047,7 +787,7 @@ function featherWeightApp() {
 				xLabels: timeTicks.major,
 				valueLabels,
 				path,
-				points
+				points,
 			};
 		},
 
@@ -1055,14 +795,14 @@ function featherWeightApp() {
 			let model = this.buildChartModel();
 			return {
 				model,
-				yAxisMarkup: model.yTicksMajor.map((tick) => `<g><line x1="${model.axisWidth - 8}" y1="${tick.y}" x2="${model.axisWidth}" y2="${tick.y}" stroke="var(--grid)" stroke-width="1"></line><text x="${model.axisWidth - 10}" y="${tick.y + 4}" text-anchor="end" fill="var(--text-faint)" font-size="11" letter-spacing="0.04em">${this.escapeSvgText(tick.value + ' ' + this.appState.unit.toLowerCase())}</text></g>`).join(''),
+				yAxisMarkup: model.yTicksMajor.map((tick) => `<g><line x1="${model.axisWidth - 8}" y1="${tick.y}" x2="${model.axisWidth}" y2="${tick.y}" stroke="var(--grid)" stroke-width="1"></line><text x="${model.axisWidth - 10}" y="${tick.y + 4}" text-anchor="end" fill="var(--text-faint)" font-size="11" letter-spacing="0.04em">${this.escapeSvgText(tick.value + ' ' + this.model.unit.toLowerCase())}</text></g>`).join(''),
 				horizontalMinorGridMarkup: model.yTicksMinor.map((tick) => `<line x1="0" y1="${tick.y}" x2="${model.width}" y2="${tick.y}" stroke="var(--grid-soft)" stroke-width="1"></line>`).join(''),
 				horizontalMajorGridMarkup: model.yTicksMajor.map((tick) => `<line x1="0" y1="${tick.y}" x2="${model.width}" y2="${tick.y}" stroke="var(--grid)" stroke-width="1"></line>`).join(''),
 				verticalMinorGridMarkup: model.xTicksMinor.map((tick) => `<line x1="${tick.x}" y1="${model.plotTop}" x2="${tick.x}" y2="${model.plotBottom}" stroke="var(--grid-soft)" stroke-width="1"></line>`).join(''),
 				verticalMajorGridMarkup: model.xTicksMajor.map((tick) => `<line x1="${tick.x}" y1="${model.plotTop}" x2="${tick.x}" y2="${model.plotBottom}" stroke="var(--grid)" stroke-width="1"></line>`).join(''),
 				valueLabelsMarkup: model.valueLabels.map((label) => `<text x="${label.x}" y="${label.y}" text-anchor="middle" dominant-baseline="middle" fill="var(--text-faint)" fill-opacity="0.82" font-size="10.5" font-weight="500" letter-spacing="-0.01em">${this.escapeSvgText(label.text)}</text>`).join(''),
 				pointsMarkup: model.points.length > 14 ? '' : model.points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="2.8" fill="var(--bg)" stroke="var(--line)" stroke-width="1.8"></circle>`).join(''),
-				xLabelsMarkup: model.xLabels.map((label) => `<text x="${label.x}" y="${model.labelY}" text-anchor="middle" fill="var(--text-faint)" font-size="11" letter-spacing="0.04em">${this.escapeSvgText(label.label)}</text>`).join('')
+				xLabelsMarkup: model.xLabels.map((label) => `<text x="${label.x}" y="${model.labelY}" text-anchor="middle" fill="var(--text-faint)" font-size="11" letter-spacing="0.04em">${this.escapeSvgText(label.label)}</text>`).join(''),
 			};
 		},
 
@@ -1084,7 +824,7 @@ function featherWeightApp() {
 			this.editingDate = null;
 			let baseWeight = this.lastEntry?.weightKg ?? 70;
 			this.setPickerFromKg(baseWeight);
-			this.setEntryDate(this.todayIsoDate());
+			this.entryDate = todayIsoDate();
 			this.overlayOpen = true;
 			this.$nextTick(() => this.syncPickerScroll());
 		},
@@ -1093,7 +833,7 @@ function featherWeightApp() {
 			this.overlayMode = 'entry';
 			this.editingDate = entry.date;
 			this.setPickerFromKg(entry.weightKg);
-			this.setEntryDate(entry.date);
+			this.entryDate = entry.date;
 			this.overlayOpen = true;
 			this.$nextTick(() => this.syncPickerScroll());
 		},
@@ -1101,9 +841,9 @@ function featherWeightApp() {
 		openGoalSetup() {
 			this.overlayMode = 'goal';
 			this.editingDate = null;
-			let baseWeight = this.appState.goal?.weightKg ?? this.lastEntry?.weightKg ?? 70;
-			this.goalRateDraftKg = this.goalRateValue();
-			this.goalRateDraftUnit = this.goalRateUnit();
+			let baseWeight = this.model.goal?.weightKg ?? this.lastEntry?.weightKg ?? 70;
+			this.goalRateDraftKg = this.model.goalRateValue();
+			this.goalRateDraftUnit = this.model.goalRateUnit();
 			this.setPickerFromKg(baseWeight);
 			this.overlayOpen = true;
 			this.$nextTick(() => this.syncPickerScroll());
@@ -1149,7 +889,7 @@ function featherWeightApp() {
 		},
 
 		applyImportedData(imported) {
-			this.appState = normalizeAppState(imported);
+			this.model = createApp(imported);
 			this.storageLocked = false;
 			this.resetHistoryView();
 			this.applyTheme();
@@ -1169,7 +909,7 @@ function featherWeightApp() {
 				if (!imported || imported.version !== VERSION) {
 					throw new Error('Unsupported version');
 				}
-				this.applyImportedData(normalizeAppState(imported));
+				this.applyImportedData(imported);
 				this.closeSettings();
 				this.$nextTick(() => {
 					this.scrollChartToEnd();
@@ -1189,7 +929,7 @@ function featherWeightApp() {
 
 		exportData() {
 			let stamp = new Date().toISOString().slice(0, 10);
-			let payload = JSON.stringify(this.appState, null, 2);
+			let payload = JSON.stringify(this.model.toJSON(), null, 2);
 			let blob = new Blob([payload], { type: 'application/json' });
 			let url = URL.createObjectURL(blob);
 			let link = document.createElement('a');
@@ -1202,7 +942,7 @@ function featherWeightApp() {
 		},
 
 		resetAppData() {
-			this.appState = defaultAppState();
+			this.model = createApp();
 			this.storageLocked = false;
 			this.editingDate = null;
 			this.overlayOpen = false;
@@ -1229,7 +969,7 @@ function featherWeightApp() {
 		},
 
 		setPickerFromKg(weightKg) {
-			let visibleValue = this.convertWeightKg(weightKg);
+			let visibleValue = this.model.convertWeightKg(weightKg);
 			let whole = Math.floor(visibleValue);
 			let decimal = Math.round((visibleValue - whole) * 10);
 			if (decimal === 10) {
@@ -1284,12 +1024,7 @@ function featherWeightApp() {
 			if (!this.entryDate) {
 				return;
 			}
-			let nextEntries = { ...this.appState.entries };
-			if (this.editingDate && this.editingDate !== this.entryDate) {
-				delete nextEntries[this.editingDate];
-			}
-			nextEntries[this.entryDate] = Number(nextWeightKg.toFixed(3));
-			this.appState.entries = nextEntries;
+			this.model.upsertEntry(this.entryDate, nextWeightKg, this.editingDate ?? undefined);
 			this.refreshChartRender();
 			this.persist();
 			this.closeOverlay();
@@ -1300,11 +1035,11 @@ function featherWeightApp() {
 		},
 
 		saveGoal() {
-			this.appState.goal = {
+			this.model.setGoal({
 				weightKg: Number(this.selectedPickerKg().toFixed(3)),
 				rateKg: Number(this.goalRateDraftKg.toFixed(3)),
-				rateUnit: this.goalRateDraftUnit === 'Month' ? 'Month' : 'Week'
-			};
+				rateUnit: this.goalRateDraftUnit === 'Month' ? 'Month' : 'Week',
+			});
 			this.persist();
 			this.closeOverlay();
 		},
@@ -1319,7 +1054,7 @@ function featherWeightApp() {
 		},
 
 		clearGoal() {
-			this.appState.goal = null;
+			this.model.clearGoal();
 			this.persist();
 			this.closeOverlay();
 		},
@@ -1330,9 +1065,7 @@ function featherWeightApp() {
 			}
 			this.removingIds = { ...this.removingIds, [date]: true };
 			window.setTimeout(() => {
-				let nextEntries = { ...this.appState.entries };
-				delete nextEntries[date];
-				this.appState.entries = nextEntries;
+				this.model.removeEntry(date);
 				let nextRemoving = { ...this.removingIds };
 				delete nextRemoving[date];
 				this.removingIds = nextRemoving;
@@ -1367,3 +1100,5 @@ function featherWeightApp() {
 		}
 	};
 }
+
+window.featherWeightViewModel = featherWeightViewModel;

@@ -12,10 +12,10 @@
 	<link rel="shortcut icon" href="./icon-192.png?v=20260409pwa1">
 	<link rel="apple-touch-icon" href="./icon-192.png?v=20260409pwa1">
 	<link rel="stylesheet" href="./index.css">
-	<script defer src="./index.js"></script>
+	<script type="module" src="./index.js"></script>
 	<script defer src="../alpine.min.js"></script>
 </head>
-<body x-data="upkeepApp()" x-init="init()" x-on:keydown.escape.window="handleEscape()" :class="{ 'app-modal-open': settingsOpen || editor.open }" x-cloak>
+<body x-data="upkeepViewModel()" x-init="init()" x-on:keydown.escape.window="handleEscape()" :class="{ 'app-modal-open': isModalOpen }" x-cloak>
 	<div class="app-shell">
 		<header>
 			<div class="header-row">
@@ -35,22 +35,22 @@
 			</div>
 			<div class="mode-switch" role="tablist" aria-label="Choose app view">
 				<template x-for="viewName in viewOptions" :key="viewName">
-					<button class="mode-btn" type="button" :class="{ active: ui.view === viewName }" x-on:click="ui.view = viewName" x-text="viewLabel(viewName)"></button>
+					<button class="mode-btn" type="button" :class="{ active: ui.view === viewName }" x-on:click="setView(viewName)" x-text="viewLabel(viewName)"></button>
 				</template>
 			</div>
 		</header>
 
 		<main class="app-scroll">
 
-			<section class="empty-state" x-show="ui.view === 'active' && visibleInstances().length === 0">
+			<section class="empty-state" x-show="showActiveEmptyState">
 				<div class="empty-eyebrow">Nothing active</div>
 				<h2>Build your first upkeep routine.</h2>
 				<p>Create a template for chores you repeat, then Upkeep will generate the next tasks automatically.</p>
 				<button class="primary-button" type="button" x-on:click="openTemplateEditor()">Create template</button>
 			</section>
 
-			<section x-show="ui.view === 'active' && visibleInstances().length > 0">
-				<template x-for="group in groupedActiveTasks()" :key="group.key">
+			<section x-show="showActiveTasks">
+				<template x-for="group in groupedActiveTasks" :key="group.key">
 					<section class="task-group" :class="'group-' + group.key" x-show="group.items.length > 0">
 						<div class="section-heading compact">
 							<div>
@@ -64,13 +64,13 @@
 									<button class="task-toggle" type="button" x-on:click="open = !open" :aria-expanded="open ? 'true' : 'false'">
 										<div class="task-toggle-main">
 											<div class="task-title-row compact">
-												<h3 x-text="instanceTitle(instance)"></h3>
+												<h3 x-text="templateForInstance(instance).title"></h3>
 											</div>
 											<div class="task-due compact" x-text="formatTaskDateLabel(instance)"></div>
 										</div>
 										<span class="task-chevron" :class="{ open: open }" aria-hidden="true">⌄</span>
 									</button>
-									<div class="task-expand-shell" :class="{ open: open }" :style="open ? `max-height: ${$refs.expandInner.scrollHeight}px` : 'max-height: 0px'" :aria-hidden="open ? 'false' : 'true'">
+									<div class="task-expand-shell" :class="{ open: open }" :style="expandShellStyle(open, $refs.expandInner)" :aria-hidden="open ? 'false' : 'true'">
 										<div class="task-expand" x-ref="expandInner">
 											<div class="task-summary" x-text="templateRuleSummary(templateForInstance(instance))"></div>
 											<ul class="checklist" x-show="hasChecklist(instance)">
@@ -95,7 +95,7 @@
 				</template>
 			</section>
 
-			<section x-show="ui.view === 'templates'">
+			<section x-show="showTemplatesView">
 				<div class="section-heading templates-heading">
 					<div>
 						<div class="section-kicker">Templates</div>
@@ -104,14 +104,14 @@
 					<button class="primary-button compact" type="button" x-on:click="openTemplateEditor()">New</button>
 				</div>
 
-				<section class="empty-state slim" x-show="sortedTemplates().length === 0">
+				<section class="empty-state slim" x-show="sortedTemplates.length === 0">
 					<div class="empty-eyebrow">No templates yet</div>
 					<h2>Start with a weekly or monthly routine.</h2>
 					<p>Add checklist steps, choose a recurrence pattern, and set how far ahead to generate tasks.</p>
 				</section>
 
 				<div class="template-list">
-					<template x-for="template in sortedTemplates()" :key="template.id">
+					<template x-for="template in sortedTemplates" :key="template.id">
 						<article class="template-card">
 							<div class="template-card-top">
 								<div>
@@ -161,9 +161,9 @@
 						<div class="settings-action-title">Theme</div>
 						<div class="settings-action-subtitle">Select the preferred color theme.</div>
 					</div>
-					<div class="segmented compact" role="group" aria-label="Choose theme" :style="{ '--segment-count': themeOptions.length, '--segment-active': Math.max(themeOptions.indexOf(data.themeMode), 0) }">
+					<div class="segmented compact" role="group" aria-label="Choose theme" :style="themeSegmentStyle()">
 						<template x-for="theme in themeOptions" :key="'theme-' + theme">
-							<button type="button" :class="{ active: data.themeMode === theme }" x-on:click="setTheme(theme)" x-text="themeLabel(theme)"></button>
+							<button type="button" :class="{ active: themeMode === theme }" x-on:click="setTheme(theme)" x-text="themeLabel(theme)"></button>
 						</template>
 					</div>
 				</div>
@@ -216,7 +216,7 @@
 			<form class="editor-form overlay-panel-inner" x-on:submit.prevent="saveTemplate()">
 				<div class="settings-header">
 					<button class="sheet-action" type="button" x-on:click="closeTemplateEditor()">Cancel</button>
-					<div class="sheet-title" x-text="editor.mode === 'create' ? 'New Template' : 'Edit Template'"></div>
+					<div class="sheet-title" x-text="editorTitle"></div>
 					<button class="sheet-action strong" type="submit">Save</button>
 				</div>
 				<div class="editor-body">
@@ -319,11 +319,11 @@
 						<div class="section-row">
 							<label class="field-label">Checklist items</label>
 						</div>
-						<p class="inline-note" x-show="editor.template.items.length === 0 && !editor.draftChecklistItem.trim()">Leave this empty if the task should be completed as a single action.</p>
+						<p class="inline-note" x-show="showChecklistEmptyNote">Leave this empty if the task should be completed as a single action.</p>
 						<div class="item-editor-list">
 							<template x-for="(item, itemIndex) in editor.template.items" :key="item.id">
 								<div class="item-editor-row">
-									<input class="field-input" type="text" x-model="item.label" :placeholder="'Step ' + (itemIndex + 1)">
+									<input class="field-input" type="text" x-model="item.label" :placeholder="stepPlaceholder(itemIndex)">
 									<div class="item-editor-actions">
 										<button class="icon-button tiny" type="button" x-on:click="moveChecklistItem(itemIndex, -1)" :disabled="itemIndex === 0" aria-label="Move item up">↑</button>
 										<button class="icon-button tiny" type="button" x-on:click="moveChecklistItem(itemIndex, 1)" :disabled="itemIndex === editor.template.items.length - 1" aria-label="Move item down">↓</button>
@@ -332,9 +332,9 @@
 								</div>
 							</template>
 							<div class="item-editor-row">
-								<input class="field-input" type="text" x-model="editor.draftChecklistItem" x-on:keydown.enter.prevent="acceptDraftChecklistItem()" :placeholder="'Step ' + (editor.template.items.length + 1)">
+								<input class="field-input" type="text" x-model="editor.draftChecklistItem" x-on:keydown.enter.prevent="acceptDraftChecklistItem()" :placeholder="stepPlaceholder(editor.template.items.length)">
 								<div class="item-editor-actions">
-									<button class="icon-button tiny" type="button" x-on:click="acceptDraftChecklistItem()" :disabled="!editor.draftChecklistItem.trim()" aria-label="Accept item">✓</button>
+									<button class="icon-button tiny" type="button" x-on:click="acceptDraftChecklistItem()" :disabled="!checklistDraftTrimmed" aria-label="Accept item">✓</button>
 								</div>
 							</div>
 						</div>

@@ -1,7 +1,8 @@
 const CACHE_PREFIX = 'upkeep';
-const CACHE_NAME = 'upkeep-v20260409pwa1';
+const CACHE_NAME = `${CACHE_PREFIX}-v20260410mvvm1`;
 const APP_ASSETS = [
 	'./',
+	'./app.js',
 	'./index.css',
 	'./index.html',
 	'./index.js',

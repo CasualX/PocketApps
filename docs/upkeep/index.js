@@ -1,183 +1,29 @@
-const VERSION = '1.0';
+import {
+	CURRENT_WINDOW_DAYS,
+	MONTH_LABELS,
+	THEME_OPTIONS,
+	WEEKDAY_NAMES,
+	createApp,
+	createDefaultRule,
+	createDefaultTemplateDraft,
+	createDemoAppState,
+	createId,
+	createRecurrenceDescription,
+	hasChecklist,
+	isoDateToDate,
+	isoDateToDayNumber,
+	isInstanceResolved,
+	migrateAppState,
+	normalizeRule,
+	todayDayNumber,
+} from './app.js';
+
 const STORAGE_KEY = 'upkeep-data';
-const ASSET_VERSION = '20260409f';
 const DEMO_HASH = '#demo';
-const RESOLVED_RETENTION_DAYS = 1;
-const CURRENT_WINDOW_DAYS = 1;
-const THEME_OPTIONS = Object.freeze(['auto', 'light', 'dark']);
 const THEME_COLORS = Object.freeze({ light: '#f3ecdf', dark: '#141311' });
-const WEEKDAY_NAMES = Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
-const MONTH_LABELS = Object.freeze(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']);
-const ORDINAL_LABELS = Object.freeze({ 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', '-1': 'last' });
 
-function defaultAppState() {
-	return {
-		version: VERSION,
-		lastOpenedDate: undefined,
-		themeMode: 'auto',
-		templates: [],
-		instances: []
-	};
-}
-
-function createDemoAppState() {
-	let templates = [
-		{
-			id: 'tpl_kitchen_reset',
-			title: 'Kitchen reset',
-			recurrence: [
-				{ id: 'rule_kitchen_reset', type: 'weekly', interval: 1, day: 'Monday' }
-			],
-			items: [
-				{ id: 'item_kitchen_counters', label: 'Clear counters' },
-				{ id: 'item_kitchen_floor', label: 'Sweep floor' },
-				{ id: 'item_kitchen_sink', label: 'Wipe sink and faucet' }
-			],
-			generationWindowDays: 10,
-			createdAt: '2026-03-02',
-			updatedAt: '2026-03-02'
-		},
-		{
-			id: 'tpl_laundry_linens',
-			title: 'Laundry and linens',
-			recurrence: [
-				{ id: 'rule_laundry_linens', type: 'weekly', interval: 1, day: 'Thursday' }
-			],
-			items: [
-				{ id: 'item_laundry_towels', label: 'Wash towels' },
-				{ id: 'item_laundry_linens', label: 'Replace kitchen linens' },
-				{ id: 'item_laundry_fold', label: 'Fold the spare set' }
-			],
-			generationWindowDays: 10,
-			createdAt: '2026-03-05',
-			updatedAt: '2026-03-05'
-		},
-		{
-			id: 'tpl_balcony_plants',
-			title: 'Water balcony plants',
-			recurrence: [
-				{ id: 'rule_balcony_plants', type: 'daily', interval: 2 }
-			],
-			items: [
-				{ id: 'item_plants_boxes', label: 'Front rail planters' },
-				{ id: 'item_plants_herbs', label: 'Herb shelf' },
-				{ id: 'item_plants_saucers', label: 'Drain saucers' }
-			],
-			generationWindowDays: 6,
-			createdAt: '2026-04-06',
-			updatedAt: '2026-04-06'
-		},
-		{
-			id: 'tpl_storage_closet',
-			title: 'Air out storage closet',
-			recurrence: [
-				{ id: 'rule_storage_closet', type: 'daily', interval: 1 }
-			],
-			items: [],
-			generationWindowDays: 3,
-			createdAt: '2026-04-01',
-			updatedAt: '2026-04-01'
-		},
-		{
-			id: 'tpl_smoke_alarms',
-			title: 'Test smoke alarms',
-			recurrence: [
-				{ id: 'rule_smoke_alarms', type: 'monthly', interval: 1, mode: 'weekday_position', ordinal: 2, weekday: 'Saturday' }
-			],
-			items: [
-				{ id: 'item_smoke_hall', label: 'Hallway detector' },
-				{ id: 'item_smoke_bedrooms', label: 'Bedroom detectors' },
-				{ id: 'item_smoke_batteries', label: 'Check backup batteries' }
-			],
-			generationWindowDays: 20,
-			createdAt: '2026-01-10',
-			updatedAt: '2026-01-10'
-		},
-		{
-			id: 'tpl_hvac_filter',
-			title: 'Swap HVAC filter',
-			recurrence: [
-				{ id: 'rule_hvac_filter', type: 'monthly', interval: 1, mode: 'day_of_month', day: 14 }
-			],
-			items: [
-				{ id: 'item_hvac_off', label: 'Shut off the unit' },
-				{ id: 'item_hvac_filter', label: 'Replace the filter' },
-				{ id: 'item_hvac_reset', label: 'Reset the thermostat reminder' }
-			],
-			generationWindowDays: 20,
-			createdAt: '2026-01-14',
-			updatedAt: '2026-01-14'
-		},
-		{
-			id: 'tpl_fridge_coils',
-			title: 'Clean fridge coils',
-			recurrence: [
-				{ id: 'rule_fridge_coils', type: 'yearly', interval: 1, month: 5, day: 2 }
-			],
-			items: [
-				{ id: 'item_fridge_pull', label: 'Pull fridge clear of the wall' },
-				{ id: 'item_fridge_vacuum', label: 'Vacuum coils and vent' },
-				{ id: 'item_fridge_level', label: 'Level and slide back into place' }
-			],
-			generationWindowDays: 30,
-			createdAt: '2025-05-02',
-			updatedAt: '2025-05-02'
-		}
-	];
-	let instances = createDemoOverdueInstances(templates, {
-		tpl_kitchen_reset: { count: 1, completedItems: 1 },
-		tpl_balcony_plants: { count: 1, completedItems: 2 },
-		tpl_smoke_alarms: { count: 1, completedItems: 0 }
-	});
-
-	return normalizeAppState({
-		version: VERSION,
-		themeMode: 'auto',
-		templates,
-		instances
-	});
-}
-
-function createDemoOverdueInstances(templates, seedConfig) {
-	let todayNumber = todayDayNumber();
-
-	return templates.flatMap(template => {
-		let config = seedConfig[template.id];
-		if (!config) {
-			return [];
-		}
-
-		let dueDates = findMatchingPastDueDates(template, config.count, todayNumber - 1, 90);
-		return dueDates.map(dueDate => {
-			let instance = buildInstance(template, dueDate);
-			if (config.completedItems > 0) {
-				instance.items = instance.items.map((item, index) => ({
-					...item,
-					state: index < config.completedItems ? 1 : 0
-				}));
-			}
-			return instance;
-		});
-	});
-}
-
-function findMatchingPastDueDates(template, count, startDayNumber, maxLookbackDays) {
-	let dueDates = [];
-	let earliestDayNumber = Math.max(isoDateToDayNumber(template.createdAt), startDayNumber - maxLookbackDays);
-
-	for (let dayNumber = startDayNumber; dayNumber >= earliestDayNumber; dayNumber -= 1) {
-		let dueDate = dayNumberToIsoDate(dayNumber);
-		if (!templateMatchesDate(template, dueDate)) {
-			continue;
-		}
-
-		dueDates.push(dueDate);
-		if (dueDates.length >= count) {
-			break;
-		}
-	}
-
-	return dueDates;
+function deepCopy(value) {
+	return JSON.parse(JSON.stringify(value));
 }
 
 function createStorage() {
@@ -188,27 +34,27 @@ function createStorage() {
 
 		load() {
 			if (demoMode) {
-				return createDemoAppState();
+				return createApp(createDemoAppState());
 			}
 
 			let raw = localStorage.getItem(STORAGE_KEY);
 			if (!raw) {
-				return defaultAppState();
+				return createApp();
 			}
 
 			try {
-				return migrateAppState(JSON.parse(raw));
+				return createApp(migrateAppState(JSON.parse(raw)));
 			}
 			catch (error) {
-				return defaultAppState();
+				return createApp();
 			}
 		},
 
-		save(data) {
+		save(model) {
 			if (demoMode) {
 				return;
 			}
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(model.toJSON()));
 		},
 
 		clear() {
@@ -218,559 +64,6 @@ function createStorage() {
 			localStorage.removeItem(STORAGE_KEY);
 		}
 	};
-}
-
-function migrateAppState(saved) {
-	return normalizeAppState(saved || {});
-}
-
-function normalizeAppState(saved) {
-	let state = defaultAppState();
-	let lastOpenedDate = isIsoDate(saved.lastOpenedDate) ? saved.lastOpenedDate : state.lastOpenedDate;
-	let themeMode = THEME_OPTIONS.includes(saved.themeMode) ? saved.themeMode : state.themeMode;
-	let templates = Array.isArray(saved.templates) ? saved.templates.map(normalizeTemplate).filter(Boolean) : [];
-	let templateIds = new Set(templates.map(template => template.id));
-	let instances = Array.isArray(saved.instances) ? saved.instances.map(normalizeInstance).filter(instance => instance && templateIds.has(instance.templateId)) : [];
-
-	return {
-		version: VERSION,
-		lastOpenedDate,
-		themeMode,
-		templates,
-		instances
-	};
-}
-
-function normalizeTemplate(saved) {
-	if (!saved || typeof saved !== 'object') {
-		return null;
-	}
-
-	let title = String(saved.title || '').trim();
-	let recurrence = Array.isArray(saved.recurrence) ? saved.recurrence.map(normalizeRule).filter(Boolean) : [];
-	let items = Array.isArray(saved.items) ? saved.items.map(normalizeTemplateItem).filter(Boolean) : [];
-	if (!title || recurrence.length === 0) {
-		return null;
-	}
-
-	return {
-		id: String(saved.id || createId('tpl')),
-		title,
-		recurrence,
-		items,
-		generationWindowDays: clampNumber(saved.generationWindowDays, 0, 365, 7),
-		createdAt: isIsoDate(saved.createdAt) ? saved.createdAt : todayIsoDate(),
-		updatedAt: isIsoDate(saved.updatedAt) ? saved.updatedAt : (isIsoDate(saved.createdAt) ? saved.createdAt : todayIsoDate())
-	};
-}
-
-function normalizeTemplateItem(saved) {
-	if (!saved || typeof saved !== 'object') {
-		return null;
-	}
-
-	let label = String(saved.label || '').trim();
-	if (!label) {
-		return null;
-	}
-
-	return {
-		id: String(saved.id || createId('item')),
-		label
-	};
-}
-
-function normalizeRule(saved) {
-	if (!saved || typeof saved !== 'object') {
-		return null;
-	}
-
-	let type = ['daily', 'weekly', 'monthly', 'yearly'].includes(saved.type) ? saved.type : 'daily';
-	let interval = clampNumber(saved.interval, 1, 365, 1);
-	let rule = {
-		id: String(saved.id || createId('rule')),
-		type,
-		interval
-	};
-
-	if (type === 'daily') {
-		return rule;
-	}
-
-	if (type === 'weekly') {
-		rule.mode = 'day_of_week';
-		rule.day = WEEKDAY_NAMES.includes(saved.day) ? saved.day : 'Monday';
-		return rule;
-	}
-
-	if (type === 'monthly') {
-		rule.mode = saved.mode === 'weekday_position' ? 'weekday_position' : 'day_of_month';
-		if (rule.mode === 'day_of_month') {
-			rule.day = clampNumber(saved.day, 1, 31, 1);
-		}
-		else {
-			rule.ordinal = clampOrdinal(saved.ordinal);
-			rule.weekday = WEEKDAY_NAMES.includes(saved.weekday) ? saved.weekday : 'Monday';
-		}
-		return rule;
-	}
-
-	rule.month = clampNumber(saved.month, 1, 12, 1);
-	rule.day = clampNumber(saved.day, 1, 31, 1);
-	return rule;
-}
-
-function normalizeInstance(saved) {
-	if (!saved || typeof saved !== 'object' || !isIsoDate(saved.dueDate)) {
-		return null;
-	}
-
-	let items = Array.isArray(saved.items) ? saved.items.map(normalizeInstanceItem).filter(Boolean) : [];
-	let completedAt = isIsoDateTime(saved.completedAt) ? saved.completedAt : null;
-
-	if (!completedAt && saved.resolvedState === 'completed' && isIsoDateTime(saved.resolvedAt)) {
-		completedAt = saved.resolvedAt;
-	}
-
-	if (!completedAt && saved.resolvedState === 'dismissed' && isIsoDateTime(saved.resolvedAt)) {
-		completedAt = saved.resolvedAt;
-	}
-
-	return {
-		id: String(saved.id || createId('inst')),
-		templateId: String(saved.templateId || ''),
-		dueDate: saved.dueDate,
-		items,
-		completedAt
-	};
-}
-
-function normalizeInstanceItem(saved) {
-	if (!saved || typeof saved !== 'object') {
-		return null;
-	}
-
-	let state = saved.state === 1 ? 1 : 0;
-	return {
-		id: String(saved.id || createId('iteminst')),
-		label: String(saved.label || '').trim(),
-		state
-	};
-}
-
-function createId(prefix) {
-	if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-		return `${prefix}_${window.crypto.randomUUID()}`;
-	}
-	return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function clampNumber(value, min, max, fallback) {
-	let number = Number(value);
-	if (!Number.isFinite(number)) {
-		return fallback;
-	}
-	return Math.max(min, Math.min(max, Math.round(number)));
-}
-
-function clampOrdinal(value) {
-	return [1, 2, 3, 4, -1].includes(Number(value)) ? Number(value) : 1;
-}
-
-function isIsoDate(value) {
-	return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
-}
-
-function isIsoDateTime(value) {
-	return typeof value === 'string' && !Number.isNaN(Date.parse(value));
-}
-
-function utcDate(year, monthIndex, day) {
-	return new Date(Date.UTC(year, monthIndex, day));
-}
-
-function todayIsoDate() {
-	return dayNumberToIsoDate(todayDayNumber());
-}
-
-function todayDayNumber() {
-	let now = new Date();
-	return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000);
-}
-
-function isoDateToDayNumber(value) {
-	let [year, month, day] = String(value).split('-').map(Number);
-	return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
-}
-
-function dayNumberToIsoDate(dayNumber) {
-	let date = new Date(dayNumber * 86400000);
-	let year = date.getUTCFullYear();
-	let month = String(date.getUTCMonth() + 1).padStart(2, '0');
-	let day = String(date.getUTCDate()).padStart(2, '0');
-	return `${year}-${month}-${day}`;
-}
-
-function isoDateToDate(value) {
-	let [year, month, day] = String(value).split('-').map(Number);
-	return new Date(year, month - 1, day);
-}
-
-function formatDate(value, options) {
-	return isoDateToDate(value).toLocaleDateString(undefined, options);
-}
-
-function formatDateTime(value) {
-	return new Date(value).toLocaleString(undefined, {
-		month: 'long',
-		day: 'numeric',
-		hour: 'numeric',
-		minute: '2-digit'
-	});
-}
-
-function weekdayNameFromDayIndex(dayIndex) {
-	return WEEKDAY_NAMES[(dayIndex + 6) % 7];
-}
-
-function weekdayNameFromIsoDate(value) {
-	return weekdayNameFromDayIndex(isoDateToDate(value).getDay());
-}
-
-function startOfWeek(dayNumber) {
-	let weekday = new Date(dayNumber * 86400000).getUTCDay();
-	let mondayOffset = (weekday + 6) % 7;
-	return dayNumber - mondayOffset;
-}
-
-function monthDifference(anchorDate, candidateDate) {
-	let anchor = isoDateToDate(anchorDate);
-	let candidate = isoDateToDate(candidateDate);
-	return (candidate.getFullYear() - anchor.getFullYear()) * 12 + (candidate.getMonth() - anchor.getMonth());
-}
-
-function yearDifference(anchorDate, candidateDate) {
-	return isoDateToDate(candidateDate).getFullYear() - isoDateToDate(anchorDate).getFullYear();
-}
-
-function daysInMonth(year, monthIndex) {
-	return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
-}
-
-function nthWeekdayOfMonth(year, monthIndex, weekdayName, ordinal) {
-	if (!WEEKDAY_NAMES.includes(weekdayName)) {
-		return null;
-	}
-
-	if (ordinal === -1) {
-		for (let day = daysInMonth(year, monthIndex); day >= 1; day -= 1) {
-			if (weekdayNameFromDayIndex(utcDate(year, monthIndex, day).getUTCDay()) === weekdayName) {
-				return day;
-			}
-		}
-		return null;
-	}
-
-	let count = 0;
-	for (let day = 1; day <= daysInMonth(year, monthIndex); day += 1) {
-		if (weekdayNameFromDayIndex(utcDate(year, monthIndex, day).getUTCDay()) === weekdayName) {
-			count += 1;
-			if (count === ordinal) {
-				return day;
-			}
-		}
-	}
-
-	return null;
-}
-
-function matchesRule(template, rule, dueDate) {
-	let dueDayNumber = isoDateToDayNumber(dueDate);
-	let anchorDayNumber = isoDateToDayNumber(template.createdAt);
-	if (dueDayNumber < anchorDayNumber) {
-		return false;
-	}
-
-	if (rule.type === 'daily') {
-		return (dueDayNumber - anchorDayNumber) % rule.interval === 0;
-	}
-
-	if (rule.type === 'weekly') {
-		if (weekdayNameFromIsoDate(dueDate) !== rule.day) {
-			return false;
-		}
-
-		let dueWeekStart = startOfWeek(dueDayNumber);
-		let anchorWeekStart = startOfWeek(anchorDayNumber);
-		return ((dueWeekStart - anchorWeekStart) / 7) % rule.interval === 0;
-	}
-
-	if (rule.type === 'monthly') {
-		let diff = monthDifference(template.createdAt, dueDate);
-		if (diff < 0 || diff % rule.interval !== 0) {
-			return false;
-		}
-
-		let date = isoDateToDate(dueDate);
-		let year = date.getFullYear();
-		let monthIndex = date.getMonth();
-		let day = date.getDate();
-
-		if (rule.mode === 'weekday_position') {
-			return day === nthWeekdayOfMonth(year, monthIndex, rule.weekday, rule.ordinal);
-		}
-
-		return day === Math.min(rule.day, daysInMonth(year, monthIndex));
-	}
-
-	let yearDiff = yearDifference(template.createdAt, dueDate);
-	if (yearDiff < 0 || yearDiff % rule.interval !== 0) {
-		return false;
-	}
-
-	let candidate = isoDateToDate(dueDate);
-	let month = candidate.getMonth() + 1;
-	let day = candidate.getDate();
-	let maxDay = daysInMonth(candidate.getFullYear(), candidate.getMonth());
-	return month === rule.month && day === Math.min(rule.day, maxDay);
-}
-
-function templateMatchesDate(template, dueDate) {
-	return template.recurrence.some(rule => matchesRule(template, rule, dueDate));
-}
-
-function buildInstance(template, dueDate) {
-	return {
-		id: createId('inst'),
-		templateId: template.id,
-		dueDate,
-		items: template.items.map(item => ({
-			id: item.id,
-			label: item.label,
-			state: 0
-		})),
-		completedAt: null
-	};
-}
-
-function isInstanceResolved(instance) {
-	return isIsoDateTime(instance.completedAt);
-}
-
-function isExpiredResolvedInstance(instance, todayNumber) {
-	if (!isInstanceResolved(instance) || !instance.completedAt) {
-		return false;
-	}
-
-	let resolvedDayNumber = Math.floor(Date.parse(instance.completedAt) / 86400000);
-	return todayNumber - resolvedDayNumber >= RESOLVED_RETENTION_DAYS;
-}
-
-function sortInstances(instances) {
-	return instances
-		.map((instance, index) => ({ instance, index }))
-		.sort((left, right) => {
-			let dueDelta = isoDateToDayNumber(left.instance.dueDate) - isoDateToDayNumber(right.instance.dueDate);
-			if (dueDelta !== 0) {
-				return dueDelta;
-			}
-
-			return left.index - right.index;
-		})
-		.map(entry => entry.instance);
-}
-
-function latestMatchingActiveInstance(instances, template, dayNumber) {
-	let latestInstance = null;
-	let latestDueDayNumber = -Infinity;
-
-	instances.forEach(instance => {
-		if (instance.templateId !== template.id || isInstanceResolved(instance)) {
-			return;
-		}
-
-		let dueDayNumber = isoDateToDayNumber(instance.dueDate);
-		if (dueDayNumber > dayNumber || !templateMatchesDate(template, instance.dueDate)) {
-			return;
-		}
-
-		if (dueDayNumber > latestDueDayNumber) {
-			latestInstance = instance;
-			latestDueDayNumber = dueDayNumber;
-		}
-	});
-
-	return latestInstance;
-}
-
-function findLatestMatchingDueDate(template, startDayNumber, endDayNumber) {
-	let earliestDayNumber = Math.max(isoDateToDayNumber(template.createdAt), startDayNumber);
-	for (let dayNumber = endDayNumber; dayNumber >= earliestDayNumber; dayNumber -= 1) {
-		let dueDate = dayNumberToIsoDate(dayNumber);
-		if (templateMatchesDate(template, dueDate)) {
-			return dueDate;
-		}
-	}
-
-	return null;
-}
-
-function laterDueDate(leftDueDate, rightDueDate) {
-	if (!leftDueDate) {
-		return rightDueDate;
-	}
-	if (!rightDueDate) {
-		return leftDueDate;
-	}
-
-	return isoDateToDayNumber(leftDueDate) >= isoDateToDayNumber(rightDueDate) ? leftDueDate : rightDueDate;
-}
-
-function relevantActiveDueDate(template, instances, backfillStartDayNumber, todayNumber) {
-	let todayDueDate = dayNumberToIsoDate(todayNumber);
-	if (templateMatchesDate(template, todayDueDate)) {
-		return todayDueDate;
-	}
-
-	let latestExistingInstance = latestMatchingActiveInstance(instances, template, todayNumber);
-	let latestExistingDueDate = latestExistingInstance ? latestExistingInstance.dueDate : null;
-	let latestBackfillDueDate = null;
-
-	if (backfillStartDayNumber !== null && backfillStartDayNumber < todayNumber) {
-		latestBackfillDueDate = findLatestMatchingDueDate(template, backfillStartDayNumber, todayNumber - 1);
-	}
-
-	return laterDueDate(latestExistingDueDate, latestBackfillDueDate);
-}
-
-function retainInstance(instances, existingKeys, instance) {
-	let key = `${instance.templateId}::${instance.dueDate}`;
-	if (existingKeys.has(key)) {
-		return;
-	}
-
-	instances.push(instance);
-	existingKeys.add(key);
-}
-
-function syncGeneratedInstances(data) {
-	let todayNumber = todayDayNumber();
-	let backfillStartDayNumber = isIsoDate(data.lastOpenedDate)
-		? Math.min(isoDateToDayNumber(data.lastOpenedDate), todayNumber)
-		: null;
-	let activeTemplateIds = new Set(data.templates.map(template => template.id));
-	let sourceInstances = data.instances.filter(instance => {
-		return activeTemplateIds.has(instance.templateId) && !isExpiredResolvedInstance(instance, todayNumber);
-	});
-	let instances = [];
-	let existingKeys = new Set();
-
-	data.templates.forEach(template => {
-		let endDay = todayNumber + clampNumber(template.generationWindowDays, 0, 365, 7);
-		let templateInstances = sourceInstances.filter(instance => instance.templateId === template.id);
-		let latestActiveInstance = latestMatchingActiveInstance(templateInstances, template, todayNumber);
-		let activeDueDate = relevantActiveDueDate(template, templateInstances, backfillStartDayNumber, todayNumber);
-
-		templateInstances.forEach(instance => {
-			if (isInstanceResolved(instance)) {
-				retainInstance(instances, existingKeys, instance);
-				return;
-			}
-
-			let dueDayNumber = isoDateToDayNumber(instance.dueDate);
-			if (dueDayNumber <= todayNumber) {
-				return;
-			}
-
-			if (dueDayNumber > endDay || !templateMatchesDate(template, instance.dueDate)) {
-				return;
-			}
-
-			retainInstance(instances, existingKeys, instance);
-		});
-
-		if (activeDueDate) {
-			let activeKey = `${template.id}::${activeDueDate}`;
-			if (!existingKeys.has(activeKey)) {
-				if (latestActiveInstance && latestActiveInstance.dueDate === activeDueDate) {
-					retainInstance(instances, existingKeys, latestActiveInstance);
-				}
-				else {
-					retainInstance(instances, existingKeys, buildInstance(template, activeDueDate));
-				}
-			}
-		}
-
-		for (let dayNumber = todayNumber; dayNumber <= endDay; dayNumber += 1) {
-			let dueDate = dayNumberToIsoDate(dayNumber);
-			let key = `${template.id}::${dueDate}`;
-			if (existingKeys.has(key)) {
-				continue;
-			}
-			if (!templateMatchesDate(template, dueDate)) {
-				continue;
-			}
-
-			instances.push(buildInstance(template, dueDate));
-			existingKeys.add(key);
-		}
-	});
-
-	data.instances = sortInstances(instances);
-	return data;
-}
-
-function saveAppState(storage, data) {
-	data.lastOpenedDate = todayIsoDate();
-	storage.save(data);
-}
-
-function deepCopy(value) {
-	return JSON.parse(JSON.stringify(value));
-}
-
-function createDefaultRule(previousRule = null) {
-	if (previousRule) {
-		let nextRule = normalizeRule(deepCopy(previousRule));
-		nextRule.id = createId('rule');
-		return nextRule;
-	}
-
-	return normalizeRule({
-		type: 'weekly',
-		interval: 1,
-		day: 'Monday'
-	});
-}
-
-function createDefaultTemplateDraft() {
-	return {
-		id: createId('tpl'),
-		title: '',
-		recurrence: [createDefaultRule()],
-		items: [],
-		generationWindowDays: 7
-	};
-}
-
-function createRecurrenceDescription(rule) {
-	let everyLabel = rule.interval === 1 ? 'Every' : `Every ${rule.interval}`;
-	if (rule.type === 'daily') {
-		return `${everyLabel} ${rule.interval === 1 ? 'day' : 'days'}`;
-	}
-
-	if (rule.type === 'weekly') {
-		return `${everyLabel} ${rule.interval === 1 ? 'week' : 'weeks'} on ${rule.day}`;
-	}
-
-	if (rule.type === 'monthly') {
-		if (rule.mode === 'weekday_position') {
-			return `${everyLabel} ${rule.interval === 1 ? 'month' : 'months'} on the ${ORDINAL_LABELS[rule.ordinal]} ${rule.weekday}`;
-		}
-		return `${everyLabel} ${rule.interval === 1 ? 'month' : 'months'} on day ${rule.day}`;
-	}
-
-	return `${everyLabel} ${rule.interval === 1 ? 'year' : 'years'} on ${MONTH_LABELS[rule.month - 1]} ${rule.day}`;
 }
 
 function watchSystemThemeChange(callback) {
@@ -789,28 +82,28 @@ function watchSystemThemeChange(callback) {
 	return mediaQuery;
 }
 
-function upkeepApp() {
+function upkeepViewModel() {
 	let storage = createStorage();
 
 	return {
-		data: defaultAppState(),
+		model: createApp(),
 		storageLocked: storage.locked,
 		viewOptions: ['active', 'templates'],
 		themeOptions: THEME_OPTIONS,
 		settingsOpen: false,
 		ui: {
-			view: 'active'
+			view: 'active',
 		},
 		saveFeedback: {
 			open: false,
-			message: ''
+			message: '',
 		},
 		saveFeedbackTimer: null,
 		editor: {
 			open: false,
 			mode: 'create',
 			template: createDefaultTemplateDraft(),
-			draftChecklistItem: ''
+			draftChecklistItem: '',
 		},
 		recurrenceTypes: [
 			{ value: 'daily', label: 'Daily' },
@@ -833,14 +126,14 @@ function upkeepApp() {
 		},
 
 		init() {
-			this.data = storage.load();
-			syncGeneratedInstances(this.data);
-			saveAppState(storage, this.data);
+			this.model = storage.load();
+			this.model.syncGeneratedInstances();
+			this.persistSnapshot();
 			this.applyTheme();
 
-			this.$watch('data.themeMode', () => {
+			this.$watch('model.themeMode', () => {
 				this.applyTheme();
-				saveAppState(storage, this.data);
+				this.persistSnapshot();
 			});
 
 			watchSystemThemeChange(() => {
@@ -849,8 +142,13 @@ function upkeepApp() {
 		},
 
 		persist() {
-			syncGeneratedInstances(this.data);
-			saveAppState(storage, this.data);
+			this.model.syncGeneratedInstances();
+			this.persistSnapshot();
+		},
+
+		persistSnapshot() {
+			this.model.setLastOpenedDate();
+			storage.save(this.model);
 		},
 
 		showSaveFeedback(message) {
@@ -866,12 +164,15 @@ function upkeepApp() {
 			}, 2800);
 		},
 
-		applyTheme() {
-			let resolvedTheme = this.data.themeMode;
-			if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') {
-				resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+		resolvedTheme() {
+			if (this.model.themeMode === 'light' || this.model.themeMode === 'dark') {
+				return this.model.themeMode;
 			}
+			return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+		},
 
+		applyTheme() {
+			let resolvedTheme = this.resolvedTheme();
 			document.documentElement.setAttribute('data-theme', resolvedTheme);
 
 			let themeColorMeta = document.querySelector('head > meta[name="theme-color"]');
@@ -887,7 +188,7 @@ function upkeepApp() {
 			return new Date().toLocaleDateString(undefined, {
 				weekday: 'long',
 				month: 'long',
-				day: 'numeric'
+				day: 'numeric',
 			});
 		},
 
@@ -902,7 +203,11 @@ function upkeepApp() {
 		},
 
 		setTheme(theme) {
-			this.data.themeMode = theme;
+			this.model.setTheme(theme);
+		},
+
+		setView(viewName) {
+			this.ui.view = viewName === 'templates' ? 'templates' : 'active';
 		},
 
 		handleEscape() {
@@ -933,7 +238,9 @@ function upkeepApp() {
 
 		async handleImport(event) {
 			let file = event && event.target && event.target.files ? event.target.files[0] : null;
-			if (!file) return;
+			if (!file) {
+				return;
+			}
 
 			try {
 				let content = await file.text();
@@ -942,9 +249,9 @@ function upkeepApp() {
 					throw new Error('Unsupported version');
 				}
 
-				this.data = migrateAppState(importedData);
-				syncGeneratedInstances(this.data);
-				saveAppState(storage, this.data);
+				this.model.reset(importedData);
+				this.model.syncGeneratedInstances();
+				this.persistSnapshot();
 				this.applyTheme();
 				this.closeTemplateEditor();
 				this.closeSettings();
@@ -954,13 +261,15 @@ function upkeepApp() {
 				alert('Import failed. Choose an Upkeep file with version 1.x.');
 			}
 			finally {
-				if (event && event.target) event.target.value = '';
+				if (event && event.target) {
+					event.target.value = '';
+				}
 			}
 		},
 
 		exportData() {
 			let stamp = new Date().toISOString().slice(0, 10);
-			let payload = JSON.stringify(this.data, null, 2);
+			let payload = JSON.stringify(this.model.toJSON(), null, 2);
 			let blob = new Blob([payload], { type: 'application/json' });
 			let url = URL.createObjectURL(blob);
 			let link = document.createElement('a');
@@ -974,86 +283,25 @@ function upkeepApp() {
 
 		confirmWipeData() {
 			let ok = confirm('Wipe all saved app data? This will erase your templates, generated tasks, and settings. Continue?');
-			if (!ok) return;
+			if (!ok) {
+				return;
+			}
 
 			storage.clear();
-			this.data = normalizeAppState(defaultAppState());
+			this.model.reset();
 			this.ui.view = 'active';
 			this.editor.template = createDefaultTemplateDraft();
 			this.applyTheme();
 			this.closeTemplateEditor();
 			this.closeSettings();
-			saveAppState(storage, this.data);
+			this.persistSnapshot();
 			alert('Saved data wiped.');
 		},
 
-		sortedTemplates() {
-			return [...this.data.templates].sort((left, right) => left.title.localeCompare(right.title));
-		},
-
-		templateById(templateId) {
-			return this.data.templates.find(template => template.id === templateId) || null;
-		},
-
-		visibleInstances() {
-			let todayNumber = todayDayNumber();
-			return this.data.instances.filter(instance => {
-				let template = this.templateById(instance.templateId);
-				return template && !isExpiredResolvedInstance(instance, todayNumber);
-			});
-		},
-
-		hasChecklist(instance) {
-			return Array.isArray(instance.items) && instance.items.length > 0;
-		},
-
-		groupKeyForInstance(instance) {
-			let diff = isoDateToDayNumber(instance.dueDate) - todayDayNumber();
-			if (diff < 0) {
-				return 'overdue';
-			}
-			if (diff < CURRENT_WINDOW_DAYS) {
-				return 'current';
-			}
-			return 'upcoming';
-		},
-
-		groupCount(groupKey) {
-			return this.visibleInstances().filter(instance => this.groupKeyForInstance(instance) === groupKey).length;
-		},
-
-		groupedActiveTasks() {
-			let groups = [
-				{ key: 'overdue', title: 'Overdue tasks', items: [] },
-				{ key: 'current', title: 'Current tasks', items: [] },
-				{ key: 'upcoming', title: 'Upcoming tasks', items: [] }
-			];
-			let items = this.visibleInstances();
-
-			items.forEach(instance => {
-				let key = this.groupKeyForInstance(instance);
-				let group = groups.find(entry => entry.key === key);
-				if (group) {
-					group.items.push(instance);
-				}
-			});
-
-			groups.forEach(group => {
-				group.items = sortInstances(group.items);
-			});
-
-			return groups.filter(group => group.items.length > 0);
-		},
-
-		instanceTitle(instance) {
-			let template = this.templateById(instance.templateId);
-			return template ? template.title : 'Untitled task';
-		},
-
 		templateForInstance(instance) {
-			return this.templateById(instance.templateId) || {
+			return this.model.templateById(instance.templateId) || {
 				title: 'Untitled task',
-				recurrence: []
+				recurrence: [],
 			};
 		},
 
@@ -1066,6 +314,19 @@ function upkeepApp() {
 
 		describeRule(rule) {
 			return createRecurrenceDescription(rule);
+		},
+
+		formatDate(value, options) {
+			return isoDateToDate(value).toLocaleDateString(undefined, options);
+		},
+
+		formatDateTime(value) {
+			return new Date(value).toLocaleString(undefined, {
+				month: 'long',
+				day: 'numeric',
+				hour: 'numeric',
+				minute: '2-digit',
+			});
 		},
 
 		formatDueLabel(dueDate) {
@@ -1087,31 +348,26 @@ function upkeepApp() {
 				relative += `in ${diff} days`;
 			}
 
-			return `${relative} · ${formatDate(dueDate, { weekday: 'long', month: 'long', day: 'numeric' })}`;
+			return `${relative} · ${this.formatDate(dueDate, { weekday: 'long', month: 'long', day: 'numeric' })}`;
 		},
 
 		formatTaskDateLabel(instance) {
 			if (instance.completedAt) {
-				return `Completed ${formatDateTime(instance.completedAt)}`;
+				return `Completed ${this.formatDateTime(instance.completedAt)}`;
 			}
 
 			return this.formatDueLabel(instance.dueDate);
 		},
 
-		remainingItemLabel(instance) {
-			if (instance.completedAt) {
-				return '';
+		groupKeyForInstance(instance) {
+			let diff = isoDateToDayNumber(instance.dueDate) - todayDayNumber();
+			if (diff < 0) {
+				return 'overdue';
 			}
-
-			let remaining = instance.items.filter(item => item.state === 0).length;
-			if (instance.items.length === 0) {
-				return '';
+			if (diff < CURRENT_WINDOW_DAYS) {
+				return 'current';
 			}
-			return remaining === 0 ? 'Ready to resolve' : `${remaining} left`;
-		},
-
-		countTemplateInstances(templateId) {
-			return this.visibleInstances().filter(instance => instance.templateId === templateId).length;
+			return 'upcoming';
 		},
 
 		taskCardClasses(instance) {
@@ -1119,14 +375,14 @@ function upkeepApp() {
 				overdue: this.groupKeyForInstance(instance) === 'overdue',
 				current: this.groupKeyForInstance(instance) === 'current',
 				upcoming: this.groupKeyForInstance(instance) === 'upcoming',
-				resolved: Boolean(instance.completedAt)
+				resolved: Boolean(instance.completedAt),
 			};
 		},
 
 		itemButtonClasses(instance, item) {
 			return {
 				complete: item.state === 1,
-				locked: isInstanceResolved(instance)
+				locked: isInstanceResolved(instance),
 			};
 		},
 
@@ -1134,7 +390,7 @@ function upkeepApp() {
 			return {
 				complete: item.state === 1,
 				pending: item.state === 0,
-				locked: isInstanceResolved(instance)
+				locked: isInstanceResolved(instance),
 			};
 		},
 
@@ -1142,64 +398,28 @@ function upkeepApp() {
 			return isInstanceResolved(instance);
 		},
 
-		reopenInstance(instance) {
-			instance.completedAt = null;
+		hasChecklist(instance) {
+			return hasChecklist(instance);
 		},
 
 		toggleInstanceItem(instanceId, itemId) {
-			let instance = this.data.instances.find(entry => entry.id === instanceId);
-			if (!instance || !this.hasChecklist(instance)) {
+			if (!this.model.toggleInstanceItem(instanceId, itemId)) {
 				return;
-			}
-
-			let item = instance.items.find(entry => entry.id === itemId);
-			if (!item) {
-				return;
-			}
-
-			let wasCompleted = Boolean(instance.completedAt);
-			item.state = item.state === 1 ? 0 : 1;
-			if (wasCompleted && item.state === 0) {
-				this.reopenInstance(instance);
-			}
-			if (instance.items.every(entry => entry.state === 1)) {
-				this.resolveInstance(instance);
 			}
 			this.persist();
 		},
 
-		resolveInstance(instance) {
-			let timestamp = new Date().toISOString();
-			instance.completedAt = timestamp;
-			instance.items = instance.items.map(item => ({
-				...item,
-				state: item.state === 0 ? 1 : item.state
-			}));
-		},
-
 		completeInstance(instanceId) {
-			let instance = this.data.instances.find(entry => entry.id === instanceId);
-			if (!instance || isInstanceResolved(instance)) {
+			if (!this.model.completeInstance(instanceId)) {
 				return;
 			}
-
-			this.resolveInstance(instance);
 			this.persist();
 		},
 
 		toggleSingleActionInstance(instanceId) {
-			let instance = this.data.instances.find(entry => entry.id === instanceId);
-			if (!instance || this.hasChecklist(instance)) {
+			if (!this.model.toggleSingleActionInstance(instanceId)) {
 				return;
 			}
-
-			if (isInstanceResolved(instance)) {
-				this.reopenInstance(instance);
-			}
-			else {
-				this.resolveInstance(instance);
-			}
-
 			this.persist();
 		},
 
@@ -1210,7 +430,7 @@ function upkeepApp() {
 				this.editor.template = createDefaultTemplateDraft();
 			}
 			else {
-				let template = this.templateById(templateId);
+				let template = this.model.templateById(templateId);
 				if (!template) {
 					return;
 				}
@@ -1218,7 +438,6 @@ function upkeepApp() {
 				this.editor.template = deepCopy(template);
 			}
 			this.editor.draftChecklistItem = '';
-
 			this.editor.open = true;
 			this.$nextTick(() => {
 				if (this.$refs.templateTitle) {
@@ -1233,6 +452,9 @@ function upkeepApp() {
 
 		normalizeEditorRule(rule) {
 			let normalized = normalizeRule(rule);
+			if (!normalized) {
+				return;
+			}
 			Object.keys(rule).forEach(key => delete rule[key]);
 			Object.assign(rule, normalized);
 		},
@@ -1250,7 +472,7 @@ function upkeepApp() {
 		},
 
 		acceptDraftChecklistItem() {
-			let label = String(this.editor.draftChecklistItem || '').trim();
+			let label = this.checklistDraftTrimmed;
 			if (!label) {
 				return;
 			}
@@ -1277,10 +499,8 @@ function upkeepApp() {
 			this.editor.template.items = items;
 		},
 
-		sanitizeEditorTemplate() {
-			let title = String(this.editor.template.title || '').trim();
-			let recurrence = this.editor.template.recurrence.map(normalizeRule).filter(Boolean);
-			let draftChecklistItem = String(this.editor.draftChecklistItem || '').trim();
+		buildEditorTemplatePayload() {
+			let draftChecklistItem = this.checklistDraftTrimmed;
 			let items = this.editor.template.items
 				.map(item => ({ id: item.id || createId('item'), label: String(item.label || '').trim() }))
 				.filter(item => item.label.length > 0);
@@ -1289,70 +509,32 @@ function upkeepApp() {
 				items.push({ id: createId('item'), label: draftChecklistItem });
 			}
 
-			if (!title) {
-				alert('Template title is required.');
-				return null;
-			}
-			if (recurrence.length === 0) {
-				alert('Add at least one recurrence rule.');
-				return null;
-			}
-
 			return {
 				id: this.editor.template.id || createId('tpl'),
-				title,
-				recurrence,
+				title: String(this.editor.template.title || '').trim(),
+				recurrence: this.editor.template.recurrence.map(rule => normalizeRule(rule)).filter(Boolean),
 				items,
-				generationWindowDays: clampNumber(this.editor.template.generationWindowDays, 0, 365, 7)
+				generationWindowDays: this.editor.template.generationWindowDays,
 			};
 		},
 
-		clearFutureInstancesForTemplate(templateId) {
-			let todayNumber = todayDayNumber();
-			this.data.instances = this.data.instances.filter(instance => {
-				if (instance.templateId !== templateId) {
-					return true;
-				}
-
-				if (isInstanceResolved(instance)) {
-					return true;
-				}
-
-				return isoDateToDayNumber(instance.dueDate) < todayNumber;
-			});
-		},
-
 		saveTemplate() {
-			let sanitized = this.sanitizeEditorTemplate();
-			if (!sanitized) {
-				return;
-			}
-
-			let today = todayIsoDate();
+			let templatePayload = this.buildEditorTemplatePayload();
 			let feedbackMessage = '';
-			if (this.editor.mode === 'edit') {
-				let templateIndex = this.data.templates.findIndex(template => template.id === sanitized.id);
-				if (templateIndex === -1) {
-					return;
-				}
 
-				let existing = this.data.templates[templateIndex];
-				this.data.templates.splice(templateIndex, 1, {
-					...existing,
-					...sanitized,
-					createdAt: existing.createdAt,
-					updatedAt: today
-				});
-				this.clearFutureInstancesForTemplate(existing.id);
-				feedbackMessage = `Updated ${sanitized.title}`;
+			try {
+				if (this.editor.mode === 'edit') {
+					this.model.updateTemplate(templatePayload.id, templatePayload);
+					feedbackMessage = `Updated ${templatePayload.title}`;
+				}
+				else {
+					this.model.createTemplate(templatePayload);
+					feedbackMessage = `Created ${templatePayload.title}`;
+				}
 			}
-			else {
-				this.data.templates.push({
-					...sanitized,
-					createdAt: today,
-					updatedAt: today
-				});
-				feedbackMessage = `Created ${sanitized.title}`;
+			catch (error) {
+				alert(error instanceof Error ? error.message : 'Could not save the template.');
+				return;
 			}
 
 			this.persist();
@@ -1362,7 +544,7 @@ function upkeepApp() {
 		},
 
 		deleteTemplate(templateId) {
-			let template = this.templateById(templateId);
+			let template = this.model.templateById(templateId);
 			if (!template) {
 				return;
 			}
@@ -1370,10 +552,97 @@ function upkeepApp() {
 				return;
 			}
 
-			this.data.templates = this.data.templates.filter(entry => entry.id !== templateId);
-			this.data.instances = this.data.instances.filter(entry => entry.templateId !== templateId);
+			this.model.deleteTemplate(templateId);
 			this.persist();
 			this.editor.open = false;
 		},
+
+		themeSegmentStyle() {
+			return {
+				'--segment-count': this.themeOptions.length,
+				'--segment-active': Math.max(this.themeOptions.indexOf(this.model.themeMode), 0),
+			};
+		},
+
+		expandShellStyle(open, expandInner) {
+			if (!open || !expandInner) {
+				return 'max-height: 0px';
+			}
+			return `max-height: ${expandInner.scrollHeight}px`;
+		},
+
+		stepPlaceholder(index) {
+			return `Step ${index + 1}`;
+		},
+
+		get isModalOpen() {
+			return this.settingsOpen || this.editor.open;
+		},
+
+		get isActiveView() {
+			return this.ui.view === 'active';
+		},
+
+		get showActiveEmptyState() {
+			return this.isActiveView && this.visibleInstances.length === 0;
+		},
+
+		get showActiveTasks() {
+			return this.isActiveView && this.visibleInstances.length > 0;
+		},
+
+		get showTemplatesView() {
+			return this.ui.view === 'templates';
+		},
+
+		get visibleInstances() {
+			return this.model.visibleInstances();
+		},
+
+		get groupedActiveTasks() {
+			let groups = [
+				{ key: 'overdue', title: 'Overdue tasks', items: [] },
+				{ key: 'current', title: 'Current tasks', items: [] },
+				{ key: 'upcoming', title: 'Upcoming tasks', items: [] }
+			];
+
+			this.visibleInstances.forEach(instance => {
+				let key = this.groupKeyForInstance(instance);
+				let group = groups.find(entry => entry.key === key);
+				if (group) {
+					group.items.push(instance);
+				}
+			});
+
+			groups.forEach(group => {
+				group.items = group.items.slice().sort((left, right) => {
+					let dueDelta = isoDateToDayNumber(left.dueDate) - isoDateToDayNumber(right.dueDate);
+					if (dueDelta !== 0) {
+						return dueDelta;
+					}
+					return left.id.localeCompare(right.id);
+				});
+			});
+
+			return groups.filter(group => group.items.length > 0);
+		},
+
+		get sortedTemplates() {
+			return this.model.sortedTemplates();
+		},
+
+		get editorTitle() {
+			return this.editor.mode === 'create' ? 'New Template' : 'Edit Template';
+		},
+
+		get checklistDraftTrimmed() {
+			return String(this.editor.draftChecklistItem || '').trim();
+		},
+
+		get showChecklistEmptyNote() {
+			return this.editor.template.items.length === 0 && !this.checklistDraftTrimmed;
+		}
 	};
 }
+
+window.upkeepViewModel = upkeepViewModel;
