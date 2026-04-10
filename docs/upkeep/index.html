@@ -5,12 +5,12 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 	<meta name="theme-color" content="#f3ecdf">
 	<title>Upkeep</title>
-	<link rel="manifest" href="./manifest.webmanifest?v=20260409pwa1">
-	<link rel="icon" type="image/svg+xml" href="./icon.svg?v=20260409pwa1">
-	<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=20260409pwa1">
-	<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=20260409pwa1">
-	<link rel="shortcut icon" href="./icon-192.png?v=20260409pwa1">
-	<link rel="apple-touch-icon" href="./icon-192.png?v=20260409pwa1">
+	<link rel="manifest" href="./manifest.webmanifest?v=20260411pwa2">
+	<link rel="icon" type="image/svg+xml" href="./icon.svg?v=20260411pwa2">
+	<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=20260411pwa2">
+	<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=20260411pwa2">
+	<link rel="shortcut icon" href="./icon-192.png?v=20260411pwa2">
+	<link rel="apple-touch-icon" href="./icon-192.png?v=20260411pwa2">
 	<link rel="stylesheet" href="./index.css">
 	<script type="module" src="./index.js"></script>
 	<script defer src="../alpine.min.js"></script>
@@ -43,10 +43,22 @@
 		<main class="app-scroll">
 
 			<section class="empty-state" x-show="showActiveEmptyState">
-				<div class="empty-eyebrow">Nothing active</div>
-				<h2>Build your first upkeep routine.</h2>
-				<p>Create a template for chores you repeat, then Upkeep will generate the next tasks automatically.</p>
-				<button class="primary-button" type="button" x-on:click="openTemplateEditor()">Create template</button>
+				<template x-if="sortedTemplates.length === 0">
+					<div>
+						<div class="empty-eyebrow">Nothing active</div>
+						<h2>Build your first upkeep routine.</h2>
+						<p>Create a template for chores you repeat, then Upkeep will generate the next tasks automatically.</p>
+						<button class="primary-button" type="button" x-on:click="openTemplateEditor()">Create template</button>
+					</div>
+				</template>
+				<template x-if="sortedTemplates.length > 0">
+					<div>
+						<div class="empty-eyebrow">All caught up</div>
+						<h2>No upkeep tasks are due right now.</h2>
+						<p>Your templates are ready. New tasks will appear automatically based on their schedules.</p>
+						<button class="primary-button" type="button" x-on:click="setView('templates')">View templates</button>
+					</div>
+				</template>
 			</section>
 
 			<section x-show="showActiveTasks">
@@ -60,17 +72,17 @@
 						</div>
 						<div class="task-list">
 							<template x-for="instance in group.items" :key="instance.id">
-								<article class="task-card compact" :class="taskCardClasses(instance)" x-data="{ open: false }">
-									<button class="task-toggle" type="button" x-on:click="open = !open" :aria-expanded="open ? 'true' : 'false'">
+								<article class="task-card compact" :class="taskCardClasses(instance)">
+									<button class="task-toggle" type="button" x-on:click="toggleTaskOpen(instance.id)" :aria-expanded="isTaskOpen(instance.id) ? 'true' : 'false'">
 										<div class="task-toggle-main">
 											<div class="task-title-row compact">
 												<h3 x-text="templateForInstance(instance).title"></h3>
 											</div>
 											<div class="task-due compact" x-text="formatTaskDateLabel(instance)"></div>
 										</div>
-										<span class="task-chevron" :class="{ open: open }" aria-hidden="true">⌄</span>
+										<span class="task-chevron" :class="{ open: isTaskOpen(instance.id) }" aria-hidden="true">⌄</span>
 									</button>
-									<div class="task-expand-shell" :class="{ open: open }" :style="expandShellStyle(open, $refs.expandInner)" :aria-hidden="open ? 'false' : 'true'">
+									<div class="task-expand-shell" :class="{ open: isTaskOpen(instance.id) }" :style="expandShellStyle(isTaskOpen(instance.id), $refs.expandInner)" :aria-hidden="isTaskOpen(instance.id) ? 'false' : 'true'">
 										<div class="task-expand" x-ref="expandInner">
 											<div class="task-summary" x-text="templateRuleSummary(templateForInstance(instance))"></div>
 											<ul class="checklist" x-show="hasChecklist(instance)">
@@ -125,11 +137,6 @@
 									</svg>
 								</button>
 							</div>
-							<ul class="template-item-list" x-show="template.items.length > 0">
-								<template x-for="item in template.items" :key="item.id">
-									<li x-text="item.label"></li>
-								</template>
-							</ul>
 						</article>
 					</template>
 				</div>
@@ -163,7 +170,7 @@
 					</div>
 					<div class="segmented compact" role="group" aria-label="Choose theme" :style="themeSegmentStyle()">
 						<template x-for="theme in themeOptions" :key="'theme-' + theme">
-							<button type="button" :class="{ active: themeMode === theme }" x-on:click="setTheme(theme)" x-text="themeLabel(theme)"></button>
+							<button type="button" :class="{ active: model.themeMode === theme }" x-on:click="setTheme(theme)" x-text="themeLabel(theme)"></button>
 						</template>
 					</div>
 				</div>
@@ -217,136 +224,205 @@
 				<div class="settings-header">
 					<button class="sheet-action" type="button" x-on:click="closeTemplateEditor()">Cancel</button>
 					<div class="sheet-title" x-text="editorTitle"></div>
-					<button class="sheet-action strong" type="submit">Save</button>
+					<div class="settings-header-spacer"></div>
 				</div>
-				<div class="editor-body">
-					<div class="field-block">
-						<div class="section-row">
-							<label class="field-label" for="template-title">Title</label>
+				<div class="editor-body guided-editor">
+					<section class="construction-step hero" :class="constructionStepClasses('title')">
+						<div class="construction-kicker">Step 1</div>
+						<div class="construction-header-block">
+							<h2>What do you need to do?</h2>
 						</div>
-						<input id="template-title" class="field-input" type="text" x-model="editor.template.title" x-ref="templateTitle" placeholder="Air conditioner filters">
-					</div>
+						<input id="template-title" class="field-input feature-input" type="text" x-model="editor.template.title" x-ref="templateTitle" placeholder="Enter the task title">
+					</section>
 
-					<div class="field-block">
-						<div class="section-row">
-							<label class="field-label">Recurrence rules</label>
+					<section class="construction-step" :class="constructionStepClasses('recurrence')">
+						<div class="construction-kicker">Step 2</div>
+						<div class="construction-header-block">
+							<h2>How often?</h2>
 						</div>
-						<div class="rule-list">
+
+						<div class="cadence-launcher" x-show="editor.template.recurrence.length === 0 && !showRuleBuilder">
+							<template x-for="option in recurrenceTypes" :key="'launch-' + option.value">
+								<button class="cadence-launch-btn" type="button" x-on:click="beginNewRule(option.value)" x-text="option.label" :disabled="!editorTitleTrimmed"></button>
+							</template>
+						</div>
+
+						<div class="rule-summary-list" x-show="editor.template.recurrence.length > 0">
 							<template x-for="rule in editor.template.recurrence" :key="rule.id">
-								<div class="rule-card">
-									<div class="rule-card-header solo-action">
-										<button class="text-button danger" type="button" x-on:click="removeRule(rule.id)" x-show="editor.template.recurrence.length > 1">Remove</button>
-									</div>
-									<div class="field-grid two-up">
-										<div class="field-block">
-											<label class="field-label">Type</label>
-											<select class="field-input" x-model="rule.type" x-on:change="normalizeEditorRule(rule)">
-												<template x-for="option in recurrenceTypes" :key="option.value">
-													<option :value="option.value" x-text="option.label"></option>
-												</template>
-											</select>
-										</div>
-										<div class="field-block">
-											<label class="field-label">Every</label>
-											<input class="field-input" type="number" min="1" max="365" x-model.number="rule.interval">
-										</div>
-									</div>
-
-									<div class="field-grid two-up" x-show="rule.type === 'weekly'">
-										<div class="field-block full-span">
-											<label class="field-label">Weekday</label>
-											<select class="field-input" x-model="rule.day">
-												<template x-for="day in weekdayOptions" :key="day.value">
-													<option :value="day.value" x-text="day.label"></option>
-												</template>
-											</select>
-										</div>
-									</div>
-
-									<div class="field-grid two-up" x-show="rule.type === 'monthly'">
-										<div class="field-block full-span">
-											<label class="field-label">Monthly mode</label>
-											<select class="field-input" x-model="rule.mode" x-on:change="normalizeEditorRule(rule)">
-												<option value="day_of_month">Specific day</option>
-												<option value="weekday_position">Positional weekday</option>
-											</select>
-										</div>
-										<div class="field-block" x-show="rule.mode === 'day_of_month'">
-											<label class="field-label">Day</label>
-											<input class="field-input" type="number" min="1" max="31" x-model.number="rule.day">
-										</div>
-										<div class="field-block" x-show="rule.mode === 'weekday_position'">
-											<label class="field-label">Ordinal</label>
-											<select class="field-input" x-model.number="rule.ordinal">
-												<template x-for="ordinal in ordinalOptions" :key="ordinal.value">
-													<option :value="ordinal.value" x-text="ordinal.label"></option>
-												</template>
-											</select>
-										</div>
-										<div class="field-block" x-show="rule.mode === 'weekday_position'">
-											<label class="field-label">Weekday</label>
-											<select class="field-input" x-model="rule.weekday">
-												<template x-for="day in weekdayOptions" :key="day.value + '-monthly'">
-													<option :value="day.value" x-text="day.label"></option>
-												</template>
-											</select>
-										</div>
-									</div>
-
-									<div class="field-grid two-up" x-show="rule.type === 'yearly'">
-										<div class="field-block">
-											<label class="field-label">Month</label>
-											<select class="field-input" x-model.number="rule.month">
-												<template x-for="month in monthOptions" :key="month.value">
-													<option :value="month.value" x-text="month.label"></option>
-												</template>
-											</select>
-										</div>
-										<div class="field-block">
-											<label class="field-label">Day</label>
-											<input class="field-input" type="number" min="1" max="31" x-model.number="rule.day">
-										</div>
-									</div>
-
-									<div class="inline-note rule-note" x-text="describeRule(rule)"></div>
-								</div>
+								<article class="rule-summary-card">
+									<button class="rule-summary-main" type="button" x-on:click="editRule(rule.id)">
+										<div class="rule-summary-title" x-text="describeRule(rule)"></div>
+										<div class="rule-summary-meta" x-show="ruleCardMeta(rule)" x-text="ruleCardMeta(rule)"></div>
+									</button>
+									<button class="icon-button tiny danger" type="button" x-on:click="removeRule(rule.id)" aria-label="Remove rule">×</button>
+								</article>
 							</template>
 						</div>
-						<button class="secondary-button compact" type="button" x-on:click="addRule()">Add rule</button>
-					</div>
 
-					<div class="field-block">
-						<div class="section-row">
-							<label class="field-label">Checklist items</label>
-						</div>
-						<p class="inline-note" x-show="showChecklistEmptyNote">Leave this empty if the task should be completed as a single action.</p>
-						<div class="item-editor-list">
-							<template x-for="(item, itemIndex) in editor.template.items" :key="item.id">
-								<div class="item-editor-row">
-									<input class="field-input" type="text" x-model="item.label" :placeholder="stepPlaceholder(itemIndex)">
-									<div class="item-editor-actions">
-										<button class="icon-button tiny" type="button" x-on:click="moveChecklistItem(itemIndex, -1)" :disabled="itemIndex === 0" aria-label="Move item up">↑</button>
-										<button class="icon-button tiny" type="button" x-on:click="moveChecklistItem(itemIndex, 1)" :disabled="itemIndex === editor.template.items.length - 1" aria-label="Move item down">↓</button>
-										<button class="icon-button tiny danger" type="button" x-on:click="removeChecklistItem(item.id)" aria-label="Remove item">×</button>
-									</div>
-								</div>
-							</template>
-							<div class="item-editor-row">
-								<input class="field-input" type="text" x-model="editor.draftChecklistItem" x-on:keydown.enter.prevent="acceptDraftChecklistItem()" :placeholder="stepPlaceholder(editor.template.items.length)">
-								<div class="item-editor-actions">
-									<button class="icon-button tiny" type="button" x-on:click="acceptDraftChecklistItem()" :disabled="!checklistDraftTrimmed" aria-label="Accept item">✓</button>
+						<div class="rule-builder" x-show="showRuleBuilder">
+							<div class="rule-builder-step">
+								<div class="field-label">Choose the rhythm</div>
+								<div class="choice-grid four-up">
+									<template x-for="option in recurrenceTypes" :key="'builder-' + option.value">
+										<button class="choice-chip" type="button" :class="{ active: editor.ruleEditor.draft.type === option.value }" x-on:click="setRuleDraftType(option.value)" x-text="option.label"></button>
+									</template>
 								</div>
 							</div>
-						</div>
-					</div>
 
-					<div class="field-block">
-						<div class="section-row">
-							<label class="field-label" for="generation-window">Create tasks ahead</label>
+							<div class="rule-builder-step" x-show="editor.ruleEditor.draft.type === 'weekly'">
+								<div class="field-label">On which day?</div>
+								<div class="choice-grid">
+									<template x-for="day in weekdayOptions" :key="'weekly-' + day.value">
+										<button class="choice-chip" type="button" :class="{ active: editor.ruleEditor.draft.day === day.value }" x-on:click="editor.ruleEditor.draft.day = day.value" x-text="day.label"></button>
+									</template>
+								</div>
+							</div>
+
+							<div class="rule-builder-step" x-show="editor.ruleEditor.draft.type === 'monthly'">
+								<div class="field-label">What kind of monthly pattern?</div>
+								<div class="choice-grid two-up">
+									<button class="choice-chip" type="button" :class="{ active: editor.ruleEditor.draft.mode !== 'weekday_position' }" x-on:click="setRuleDraftMonthlyMode('day_of_month')">Specific day</button>
+									<button class="choice-chip" type="button" :class="{ active: editor.ruleEditor.draft.mode === 'weekday_position' }" x-on:click="setRuleDraftMonthlyMode('weekday_position')">Positional weekday</button>
+								</div>
+								<div class="field-grid two-up monthly-builder" x-show="editor.ruleEditor.draft.mode !== 'weekday_position'">
+									<div class="field-block full-span">
+										<label class="field-label">Day of month</label>
+										<input class="field-input" type="number" min="1" max="31" x-model.number="editor.ruleEditor.draft.day">
+									</div>
+								</div>
+								<div class="field-grid two-up monthly-builder" x-show="editor.ruleEditor.draft.mode === 'weekday_position'">
+									<div class="field-block">
+										<label class="field-label">Which one?</label>
+										<select class="field-input" x-model.number="editor.ruleEditor.draft.ordinal">
+											<template x-for="ordinal in ordinalOptions" :key="'ordinal-' + ordinal.value">
+												<option :value="ordinal.value" x-text="ordinal.label"></option>
+											</template>
+										</select>
+									</div>
+									<div class="field-block">
+										<label class="field-label">Weekday</label>
+										<select class="field-input" x-model="editor.ruleEditor.draft.weekday">
+											<template x-for="day in weekdayOptions" :key="'monthly-' + day.value">
+												<option :value="day.value" x-text="day.label"></option>
+											</template>
+										</select>
+									</div>
+								</div>
+							</div>
+
+							<div class="rule-builder-step" x-show="editor.ruleEditor.draft.type === 'yearly'">
+								<div class="field-label">When each year?</div>
+								<div class="field-grid two-up">
+									<div class="field-block">
+										<label class="field-label">Month</label>
+										<select class="field-input" x-model.number="editor.ruleEditor.draft.month">
+											<template x-for="month in monthOptions" :key="'yearly-' + month.value">
+												<option :value="month.value" x-text="month.label"></option>
+											</template>
+										</select>
+									</div>
+									<div class="field-block">
+										<label class="field-label">Day</label>
+										<input class="field-input" type="number" min="1" max="31" x-model.number="editor.ruleEditor.draft.day">
+									</div>
+								</div>
+							</div>
+
+							<div class="rule-builder-step advanced-shell">
+								<div class="disclosure-heading" x-on:click="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen" :aria-expanded="editor.ruleEditor.advancedOpen ? 'true' : 'false'" role="button" tabindex="0" x-on:keydown.enter.prevent="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen" x-on:keydown.space.prevent="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen">
+									<span class="field-label">Repeat details</span>
+									<span class="disclosure-chevron" :class="{ open: editor.ruleEditor.advancedOpen }" aria-hidden="true">⌄</span>
+								</div>
+								<div class="advanced-panel" x-show="editor.ruleEditor.advancedOpen">
+									<div class="field-block">
+										<div class="interval-row advanced-interval-row">
+											<span>Every</span>
+											<input class="field-input interval-input" type="number" min="1" max="365" x-model.number="editor.ruleEditor.draft.interval">
+											<span x-text="editor.ruleEditor.draft.type === 'daily' ? (editor.ruleEditor.draft.interval === 1 ? 'day' : 'days') : editor.ruleEditor.draft.type === 'weekly' ? (editor.ruleEditor.draft.interval === 1 ? 'week' : 'weeks') : editor.ruleEditor.draft.type === 'monthly' ? (editor.ruleEditor.draft.interval === 1 ? 'month' : 'months') : (editor.ruleEditor.draft.interval === 1 ? 'year' : 'years')"></span>
+										</div>
+									</div>
+									<div class="field-block" :class="{ disabled: editor.ruleEditor.draft.interval <= 1 }">
+										<label class="field-label">Start counting from</label>
+										<input class="field-input" type="date" x-model="editor.ruleEditor.referenceDate" :disabled="editor.ruleEditor.draft.interval <= 1">
+										<div class="field-hint" x-text="ruleEditorStartHint()"></div>
+									</div>
+								</div>
+							</div>
+
+							<div class="rule-builder-divider"></div>
+							<div class="rule-preview-pill" x-text="ruleEditorPreview()"></div>
+
+							<div class="builder-actions">
+								<button class="secondary-button compact" type="button" x-on:click="closeRuleEditor()">Cancel</button>
+								<button class="primary-button compact" type="button" x-on:click="saveRuleDraft()" x-text="editor.ruleEditor.mode === 'edit' ? 'Update rule' : 'Add rule'"></button>
+							</div>
 						</div>
-						<div class="field-hint">How many days in advance upcoming tasks should appear.</div>
-						<input id="generation-window" class="field-input" type="number" min="0" max="365" x-model.number="editor.template.generationWindowDays">
-					</div>
+
+						<div class="rule-actions-row" x-show="editor.template.recurrence.length > 0 && !showRuleBuilder">
+							<button class="secondary-button compact" type="button" x-on:click="beginNewRule()">Add another rule</button>
+						</div>
+					</section>
+
+					<section class="construction-step" :class="constructionStepClasses('checklist')">
+						<div class="construction-kicker">Step 3</div>
+						<div class="construction-header-block">
+							<h2>Checklist items</h2>
+						</div>
+						<p class="inline-note">Optional list of items.</p>
+						<div class="item-editor-list">
+							<template x-for="(item, itemIndex) in editor.template.items" :key="item.id">
+								<div class="item-editor-row guided-item-row checklist-editor-item" :class="checklistItemClasses(item)" x-on:dragenter.prevent="setChecklistDropTarget(item.id)" x-on:dragover.prevent="setChecklistDropTarget(item.id)" x-on:drop="handleChecklistDrop($event, item.id)">
+									<button
+										class="drag-handle"
+										type="button"
+										draggable="true"
+										x-on:dragstart="startChecklistDrag($event, item.id)"
+										x-on:dragend="finishChecklistDrag()"
+										x-on:click.prevent
+										aria-label="Reorder checklist item"
+									>
+										<svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor">
+											<circle cx="6" cy="5" r="1.2"></circle>
+											<circle cx="6" cy="10" r="1.2"></circle>
+											<circle cx="6" cy="15" r="1.2"></circle>
+											<circle cx="14" cy="5" r="1.2"></circle>
+											<circle cx="14" cy="10" r="1.2"></circle>
+											<circle cx="14" cy="15" r="1.2"></circle>
+										</svg>
+									</button>
+									<input class="field-input" type="text" x-model="item.label" x-on:keydown.enter.prevent="confirmChecklistItem(item.id)" placeholder="Checklist item">
+									<div class="item-editor-actions">
+										<button class="icon-button tiny" type="button" x-show="item.isDraft" x-on:click="confirmChecklistItem(item.id)" :disabled="!String(item.label || '').trim()" aria-label="Confirm item">✓</button>
+										<button class="icon-button tiny danger" type="button" x-show="!item.isDraft" x-on:click="removeChecklistItem(item.id)" aria-label="Remove item">×</button>
+									</div>
+								</div>
+							</template>
+						</div>
+					</section>
+
+					<section class="construction-step subtle" :class="constructionStepClasses('timing')">
+						<div class="construction-kicker">Step 4</div>
+						<div class="construction-header-block">
+							<h2>When should this show up?</h2>
+						</div>
+						<div class="choice-grid two-up timing-mode-grid">
+							<button class="choice-chip" type="button" :class="{ active: editor.windowMode === 'auto' }" x-on:click="setGenerationWindowMode('auto')">Automatic</button>
+							<button class="choice-chip" type="button" :class="{ active: editor.windowMode === 'custom' }" x-on:click="setGenerationWindowMode('custom')">Custom</button>
+						</div>
+						<div class="rule-preview-pill timing-preview" x-text="generationWindowSummary()"></div>
+						<div class="field-block" x-show="editor.windowMode === 'custom'">
+							<label class="field-label" for="generation-window">Days ahead</label>
+							<input id="generation-window" class="field-input" type="number" min="0" max="365" x-model.number="editor.template.generationWindowDays">
+						</div>
+					</section>
+
+					<section class="construction-step final-step" :class="constructionStepClasses('submit')">
+						<div class="construction-kicker">Step 5</div>
+						<div class="construction-header-block">
+							<h2>Save template</h2>
+						</div>
+						<button class="primary-button final-save-button" type="submit" x-text="editor.mode === 'edit' ? 'Save changes' : 'Create template'"></button>
+					</section>
 
 					<div class="danger-zone" x-show="editor.mode === 'edit'">
 						<div>
@@ -372,7 +448,7 @@
 	<script>
 	if ('serviceWorker' in navigator) {
 		window.addEventListener('load', () => {
-			navigator.serviceWorker.register('./sw.js').catch(error => {
+			navigator.serviceWorker.register('./sw.js?v=20260411fix1').catch(error => {
 				console.error('Service worker registration failed:', error);
 			});
 		});

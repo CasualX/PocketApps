@@ -15,12 +15,16 @@ import {
 	isInstanceResolved,
 	migrateAppState,
 	normalizeRule,
+	suggestGenerationWindowDays,
+	suggestRuleStartDate,
 	todayDayNumber,
+	todayIsoDate,
 } from './app.js';
 
 const STORAGE_KEY = 'upkeep-data';
 const DEMO_HASH = '#demo';
 const THEME_COLORS = Object.freeze({ light: '#f3ecdf', dark: '#141311' });
+let transparentDragImage = null;
 
 function deepCopy(value) {
 	return JSON.parse(JSON.stringify(value));
@@ -82,6 +86,147 @@ function watchSystemThemeChange(callback) {
 	return mediaQuery;
 }
 
+function clampWholeNumber(value, min, max, fallback) {
+	let number = Number(value);
+	if (!Number.isFinite(number)) {
+		return fallback;
+	}
+	return Math.max(min, Math.min(max, Math.round(number)));
+}
+
+function isIsoDateString(value) {
+	return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+}
+
+function createBlankTemplateDraft() {
+	let draft = createDefaultTemplateDraft();
+	draft.recurrence = [];
+	draft.generationWindowDays = suggestGenerationWindowDays([]);
+	return draft;
+}
+
+function createChecklistDraftItem() {
+	return {
+		id: createId('item'),
+		label: '',
+		isDraft: true,
+	};
+}
+
+function createChecklistEditorItems(items = []) {
+	let normalized = [];
+	let hasDraft = false;
+
+	items.forEach(item => {
+		if (!item || typeof item !== 'object') {
+			return;
+		}
+
+		let normalizedItem = {
+			id: String(item.id || createId('item')),
+			label: String(item.label || ''),
+			isDraft: Boolean(item.isDraft),
+		};
+
+		if (normalizedItem.isDraft) {
+			if (hasDraft) {
+				return;
+			}
+			hasDraft = true;
+		}
+
+		normalized.push(normalizedItem);
+	});
+
+	if (!hasDraft) {
+		normalized.push(createChecklistDraftItem());
+	}
+
+	return normalized;
+}
+
+function createChecklistDragState() {
+	return {
+		activeId: null,
+		targetId: null,
+	};
+}
+
+function getTransparentDragImage() {
+	if (transparentDragImage) {
+		return transparentDragImage;
+	}
+
+	let image = document.createElement('div');
+	image.setAttribute('aria-hidden', 'true');
+	image.style.position = 'fixed';
+	image.style.top = '-9999px';
+	image.style.left = '-9999px';
+	image.style.width = '1px';
+	image.style.height = '1px';
+	image.style.opacity = '0';
+	image.style.pointerEvents = 'none';
+	document.body.appendChild(image);
+	transparentDragImage = image;
+	return transparentDragImage;
+}
+
+function createRuleEditorState() {
+	return {
+		open: false,
+		mode: 'create',
+		ruleId: null,
+		draft: createDefaultRule(),
+		referenceDate: todayIsoDate(),
+		advancedOpen: false,
+	};
+}
+
+function ensureRuleDraftShape(rule) {
+	if (!rule || typeof rule !== 'object') {
+		return createDefaultRule();
+	}
+
+	rule.id = String(rule.id || createId('rule'));
+	rule.type = ['daily', 'weekly', 'monthly', 'yearly'].includes(String(rule.type)) ? String(rule.type) : 'weekly';
+	rule.interval = clampWholeNumber(rule.interval, 1, 365, 1);
+
+	if (rule.type === 'weekly') {
+		rule.day = WEEKDAY_NAMES.includes(String(rule.day)) ? String(rule.day) : 'Monday';
+	}
+
+	if (rule.type === 'monthly') {
+		rule.mode = rule.mode === 'weekday_position' ? 'weekday_position' : 'day_of_month';
+		rule.day = clampWholeNumber(rule.day, 1, 31, 1);
+		rule.ordinal = [1, 2, 3, 4, -1].includes(Number(rule.ordinal)) ? Number(rule.ordinal) : 1;
+		rule.weekday = WEEKDAY_NAMES.includes(String(rule.weekday)) ? String(rule.weekday) : 'Monday';
+	}
+
+	if (rule.type === 'yearly') {
+		rule.month = clampWholeNumber(rule.month, 1, 12, 1);
+		rule.day = clampWholeNumber(rule.day, 1, 31, 1);
+	}
+
+	return rule;
+}
+
+function createRuleDraft(type, sourceRule = null) {
+	let draft = sourceRule ? deepCopy(sourceRule) : createDefaultRule();
+	draft.id = createId('rule');
+	draft.type = type;
+	return ensureRuleDraftShape(draft);
+}
+
+function summarizeDays(value) {
+	if (value <= 0) {
+		return 'the same day';
+	}
+	if (value === 1) {
+		return '1 day early';
+	}
+	return `${value} days early`;
+}
+
 function upkeepViewModel() {
 	let storage = createStorage();
 
@@ -93,6 +238,7 @@ function upkeepViewModel() {
 		settingsOpen: false,
 		ui: {
 			view: 'active',
+			openTaskIds: [],
 		},
 		saveFeedback: {
 			open: false,
@@ -102,9 +248,15 @@ function upkeepViewModel() {
 		editor: {
 			open: false,
 			mode: 'create',
-			template: createDefaultTemplateDraft(),
-			draftChecklistItem: '',
+			template: {
+				...createBlankTemplateDraft(),
+				items: createChecklistEditorItems(),
+			},
+			ruleEditor: createRuleEditorState(),
+			windowMode: 'auto',
+			advancedTimingOpen: false,
 		},
+		checklistDrag: createChecklistDragState(),
 		recurrenceTypes: [
 			{ value: 'daily', label: 'Daily' },
 			{ value: 'weekly', label: 'Weekly' },
@@ -128,6 +280,7 @@ function upkeepViewModel() {
 		init() {
 			this.model = storage.load();
 			this.model.syncGeneratedInstances();
+			this.pruneOpenTasks();
 			this.persistSnapshot();
 			this.applyTheme();
 
@@ -143,6 +296,7 @@ function upkeepViewModel() {
 
 		persist() {
 			this.model.syncGeneratedInstances();
+			this.pruneOpenTasks();
 			this.persistSnapshot();
 		},
 
@@ -210,11 +364,35 @@ function upkeepViewModel() {
 			this.ui.view = viewName === 'templates' ? 'templates' : 'active';
 		},
 
+		isTaskOpen(instanceId) {
+			return this.ui.openTaskIds.includes(instanceId);
+		},
+
+		toggleTaskOpen(instanceId) {
+			if (this.isTaskOpen(instanceId)) {
+				this.ui.openTaskIds = this.ui.openTaskIds.filter(id => id !== instanceId);
+				return;
+			}
+
+			this.ui.openTaskIds = [...this.ui.openTaskIds, instanceId];
+		},
+
+		pruneOpenTasks() {
+			let visibleIds = new Set(this.visibleInstances.map(instance => instance.id));
+			this.ui.openTaskIds = this.ui.openTaskIds.filter(id => visibleIds.has(id));
+		},
+
 		handleEscape() {
+			if (this.editor.ruleEditor.open) {
+				this.closeRuleEditor();
+				return;
+			}
+
 			if (this.editor.open) {
 				this.closeTemplateEditor();
 				return;
 			}
+
 			if (this.settingsOpen) {
 				this.closeSettings();
 			}
@@ -251,6 +429,7 @@ function upkeepViewModel() {
 
 				this.model.reset(importedData);
 				this.model.syncGeneratedInstances();
+				this.pruneOpenTasks();
 				this.persistSnapshot();
 				this.applyTheme();
 				this.closeTemplateEditor();
@@ -268,7 +447,7 @@ function upkeepViewModel() {
 		},
 
 		exportData() {
-			let stamp = new Date().toISOString().slice(0, 10);
+			let stamp = todayIsoDate();
 			let payload = JSON.stringify(this.model.toJSON(), null, 2);
 			let blob = new Blob([payload], { type: 'application/json' });
 			let url = URL.createObjectURL(blob);
@@ -290,7 +469,10 @@ function upkeepViewModel() {
 			storage.clear();
 			this.model.reset();
 			this.ui.view = 'active';
-			this.editor.template = createDefaultTemplateDraft();
+			this.ui.openTaskIds = [];
+			this.setEditorTemplate(createBlankTemplateDraft());
+			this.editor.ruleEditor = createRuleEditorState();
+			this.editor.windowMode = 'auto';
 			this.applyTheme();
 			this.closeTemplateEditor();
 			this.closeSettings();
@@ -425,19 +607,26 @@ function upkeepViewModel() {
 
 		openTemplateEditor(templateId = null) {
 			this.closeSettings();
+
 			if (!templateId) {
 				this.editor.mode = 'create';
-				this.editor.template = createDefaultTemplateDraft();
+				this.setEditorTemplate(createBlankTemplateDraft());
+				this.editor.windowMode = 'auto';
 			}
 			else {
 				let template = this.model.templateById(templateId);
 				if (!template) {
 					return;
 				}
+
 				this.editor.mode = 'edit';
-				this.editor.template = deepCopy(template);
+				this.setEditorTemplate(deepCopy(template));
+				this.editor.windowMode = this.isAutomaticGenerationWindow(template) ? 'auto' : 'custom';
 			}
-			this.editor.draftChecklistItem = '';
+
+			this.resetChecklistDragState();
+			this.editor.ruleEditor = createRuleEditorState();
+			this.editor.advancedTimingOpen = false;
 			this.editor.open = true;
 			this.$nextTick(() => {
 				if (this.$refs.templateTitle) {
@@ -447,74 +636,240 @@ function upkeepViewModel() {
 		},
 
 		closeTemplateEditor() {
+			this.resetChecklistDragState();
+			this.editor.ruleEditor = createRuleEditorState();
 			this.editor.open = false;
 		},
 
-		normalizeEditorRule(rule) {
-			let normalized = normalizeRule(rule);
-			if (!normalized) {
-				return;
-			}
-			Object.keys(rule).forEach(key => delete rule[key]);
-			Object.assign(rule, normalized);
+		setEditorTemplate(template) {
+			this.editor.template = {
+				...template,
+				items: createChecklistEditorItems(template && Array.isArray(template.items) ? template.items : []),
+			};
 		},
 
-		addRule() {
-			let previousRule = this.editor.template.recurrence[this.editor.template.recurrence.length - 1] || null;
-			this.editor.template.recurrence = [...this.editor.template.recurrence, createDefaultRule(previousRule)];
+		resetChecklistDragState() {
+			this.checklistDrag = createChecklistDragState();
 		},
 
-		removeRule(ruleId) {
-			if (this.editor.template.recurrence.length === 1) {
-				return;
-			}
-			this.editor.template.recurrence = this.editor.template.recurrence.filter(rule => rule.id !== ruleId);
-		},
-
-		acceptDraftChecklistItem() {
-			let label = this.checklistDraftTrimmed;
-			if (!label) {
+		reorderChecklistItems(activeId, nextIndex) {
+			let currentItems = [...this.editor.template.items];
+			let currentIndex = currentItems.findIndex(item => item.id === activeId);
+			if (currentIndex === -1) {
 				return;
 			}
 
-			this.editor.template.items = [
-				...this.editor.template.items,
-				{ id: createId('item'), label }
-			];
-			this.editor.draftChecklistItem = '';
-		},
+			let insertionIndex = Math.max(0, Math.min(nextIndex, currentItems.length - 1));
 
-		removeChecklistItem(itemId) {
-			this.editor.template.items = this.editor.template.items.filter(item => item.id !== itemId);
-		},
-
-		moveChecklistItem(index, delta) {
-			let nextIndex = index + delta;
-			if (nextIndex < 0 || nextIndex >= this.editor.template.items.length) {
+			if (currentIndex === insertionIndex) {
 				return;
 			}
+
+			let [activeItem] = currentItems.splice(currentIndex, 1);
+			currentItems.splice(insertionIndex, 0, activeItem);
+			this.editor.template.items = currentItems;
+		},
+
+		startChecklistDrag(event, itemId) {
+			let transfer = event.dataTransfer;
+			if (!transfer) {
+				return;
+			}
+
+			this.resetChecklistDragState();
+			this.checklistDrag.activeId = itemId;
+			transfer.effectAllowed = 'move';
+			transfer.dropEffect = 'move';
+			transfer.setData('text/plain', itemId);
+			transfer.setDragImage(getTransparentDragImage(), 0, 0);
+		},
+
+		setChecklistDropTarget(itemId) {
+			if (!this.checklistDrag.activeId) {
+				return;
+			}
+
+			let targetIndex = this.editor.template.items.findIndex(item => item.id === itemId);
+			if (targetIndex === -1) {
+				return;
+			}
+
+			this.checklistDrag.targetId = itemId;
+		},
+
+		handleChecklistDrop(event, itemId = this.checklistDrag.targetId) {
+			if (!this.checklistDrag.activeId) {
+				return;
+			}
+
+			event.preventDefault();
+			let targetIndex = this.editor.template.items.findIndex(item => item.id === itemId);
+			if (targetIndex !== -1) {
+				this.reorderChecklistItems(this.checklistDrag.activeId, targetIndex);
+			}
+			this.resetChecklistDragState();
+		},
+
+		finishChecklistDrag() {
+			if (!this.checklistDrag.activeId) {
+				return;
+			}
+
+			this.resetChecklistDragState();
+		},
+
+		checklistItemClasses(item) {
+			return {
+				'is-draft': item.isDraft,
+				'is-dragging': this.checklistDrag.activeId === item.id,
+				'is-drop-target': this.checklistDrag.targetId === item.id && this.checklistDrag.activeId !== item.id,
+			};
+		},
+
+		confirmChecklistItem(itemId) {
 			let items = [...this.editor.template.items];
-			let [item] = items.splice(index, 1);
-			items.splice(nextIndex, 0, item);
+			let index = items.findIndex(item => item.id === itemId);
+			if (index === -1) {
+				return;
+			}
+
+			let item = items[index];
+			let label = String(item.label || '').trim();
+			items[index] = {
+				...item,
+				label,
+			};
+
+			if (!item.isDraft || !label) {
+				this.editor.template.items = items;
+				return;
+			}
+
+			items[index] = {
+				...items[index],
+				isDraft: false,
+			};
+			items.push(createChecklistDraftItem());
 			this.editor.template.items = items;
 		},
 
+		beginNewRule(type = 'weekly') {
+			let previousRule = this.editor.template.recurrence[this.editor.template.recurrence.length - 1] || null;
+			this.editor.ruleEditor = {
+				open: true,
+				mode: 'create',
+				ruleId: null,
+				draft: createRuleDraft(type, previousRule),
+				referenceDate: todayIsoDate(),
+				advancedOpen: false,
+			};
+		},
+
+		editRule(ruleId) {
+			let rule = this.editor.template.recurrence.find(entry => entry.id === ruleId);
+			if (!rule) {
+				return;
+			}
+
+			this.editor.ruleEditor = {
+				open: true,
+				mode: 'edit',
+				ruleId,
+				draft: ensureRuleDraftShape(deepCopy(rule)),
+				referenceDate: isIsoDateString(rule.startsOn) ? rule.startsOn : (this.editor.template.createdAt || todayIsoDate()),
+				advancedOpen: false,
+			};
+		},
+
+		closeRuleEditor() {
+			this.editor.ruleEditor = createRuleEditorState();
+		},
+
+		setRuleDraftType(type) {
+			this.editor.ruleEditor.draft.type = type;
+			ensureRuleDraftShape(this.editor.ruleEditor.draft);
+		},
+
+		setRuleDraftMonthlyMode(mode) {
+			this.editor.ruleEditor.draft.mode = mode;
+			ensureRuleDraftShape(this.editor.ruleEditor.draft);
+		},
+
+		saveRuleDraft() {
+			let normalized = normalizeRule(this.editor.ruleEditor.draft);
+			if (!normalized) {
+				alert('Choose how often this should happen.');
+				return;
+			}
+
+			if (normalized.interval > 1) {
+				if (!isIsoDateString(this.editor.ruleEditor.referenceDate)) {
+					alert('Choose a start date for repeating intervals greater than 1.');
+					return;
+				}
+
+				normalized.startsOn = suggestRuleStartDate(normalized, this.editor.ruleEditor.referenceDate);
+			}
+			else if (normalized.startsOn) {
+				delete normalized.startsOn;
+			}
+
+			if (this.editor.ruleEditor.mode === 'edit' && this.editor.ruleEditor.ruleId) {
+				this.editor.template.recurrence = this.editor.template.recurrence.map(rule => {
+					return rule.id === this.editor.ruleEditor.ruleId ? normalized : rule;
+				});
+			}
+			else {
+				this.editor.template.recurrence = [...this.editor.template.recurrence, normalized];
+			}
+
+			this.closeRuleEditor();
+		},
+
+		removeRule(ruleId) {
+			this.editor.template.recurrence = this.editor.template.recurrence.filter(rule => rule.id !== ruleId);
+			if (this.editor.ruleEditor.ruleId === ruleId) {
+				this.closeRuleEditor();
+			}
+		},
+
+		removeChecklistItem(itemId) {
+			this.editor.template.items = createChecklistEditorItems(this.editor.template.items.filter(item => item.id !== itemId));
+			if (this.checklistDrag.activeId === itemId) {
+				this.resetChecklistDragState();
+			}
+		},
+
+		setGenerationWindowMode(mode) {
+			this.editor.windowMode = mode === 'custom' ? 'custom' : 'auto';
+			if (this.editor.windowMode === 'custom') {
+				this.editor.template.generationWindowDays = this.effectiveGenerationWindow;
+			}
+		},
+
+		isAutomaticGenerationWindow(template) {
+			if (!template) {
+				return true;
+			}
+			return clampWholeNumber(template.generationWindowDays, 0, 365, suggestGenerationWindowDays(template.recurrence)) === suggestGenerationWindowDays(template.recurrence);
+		},
+
 		buildEditorTemplatePayload() {
-			let draftChecklistItem = this.checklistDraftTrimmed;
 			let items = this.editor.template.items
-				.map(item => ({ id: item.id || createId('item'), label: String(item.label || '').trim() }))
+				.map(item => ({
+					id: item.id || createId('item'),
+					label: String(item.label || '').trim(),
+				}))
 				.filter(item => item.label.length > 0);
 
-			if (draftChecklistItem) {
-				items.push({ id: createId('item'), label: draftChecklistItem });
-			}
+			let recurrence = this.editor.template.recurrence.map(rule => normalizeRule(rule)).filter(Boolean);
 
 			return {
 				id: this.editor.template.id || createId('tpl'),
 				title: String(this.editor.template.title || '').trim(),
-				recurrence: this.editor.template.recurrence.map(rule => normalizeRule(rule)).filter(Boolean),
+				recurrence,
 				items,
-				generationWindowDays: this.editor.template.generationWindowDays,
+				generationWindowDays: this.effectiveGenerationWindow,
 			};
 		},
 
@@ -571,8 +926,79 @@ function upkeepViewModel() {
 			return `max-height: ${expandInner.scrollHeight}px`;
 		},
 
-		stepPlaceholder(index) {
-			return `Step ${index + 1}`;
+		constructionStepClasses(stepName) {
+			let titleReady = this.editorTitleTrimmed.length > 0;
+			let recurrenceReady = this.editor.template.recurrence.length > 0;
+			let muted = false;
+
+			if (stepName === 'recurrence') {
+				muted = !titleReady;
+			}
+			else if (stepName === 'checklist' || stepName === 'timing' || stepName === 'submit') {
+				muted = !titleReady || !recurrenceReady;
+			}
+
+			if (this.editor.ruleEditor.open && stepName !== 'recurrence') {
+				muted = true;
+			}
+
+			return {
+				muted,
+				complete: (stepName === 'title' && titleReady) || (stepName === 'recurrence' && recurrenceReady),
+				active: stepName === 'recurrence' && this.editor.ruleEditor.open,
+			};
+		},
+
+		ruleCardMeta(rule) {
+			if (rule.interval <= 1) {
+				return '';
+			}
+
+			if (isIsoDateString(rule.startsOn)) {
+				return `Counting from ${this.formatDate(rule.startsOn, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+			}
+
+			return '';
+		},
+
+		ruleEditorStartLabel() {
+			if (this.editor.ruleEditor.draft.interval <= 1) {
+				return 'Not used for every 1';
+			}
+
+			let effectiveDate = this.ruleEditorEffectiveStartDate;
+			return `First due on ${this.formatDate(effectiveDate, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+		},
+
+		ruleEditorStartHint() {
+			if (this.editor.ruleEditor.draft.interval <= 1) {
+				return 'Only used when repeat is greater than 1.';
+			}
+
+			return this.ruleEditorStartLabel();
+		},
+
+		ruleEditorPreview() {
+			let normalized = normalizeRule(this.editor.ruleEditor.draft);
+			if (!normalized) {
+				return 'Choose how often this should happen.';
+			}
+
+			let summary = createRecurrenceDescription(normalized);
+			if (normalized.interval <= 1) {
+				return summary;
+			}
+
+			let startDate = this.ruleEditorEffectiveStartDate;
+			return `${summary} · starts ${this.formatDate(startDate, { month: 'short', day: 'numeric' })}`;
+		},
+
+		generationWindowSummary() {
+			if (this.effectiveGenerationWindow === 0) {
+				return 'This will appear on the day it is due.';
+			}
+
+			return `This will appear ${summarizeDays(this.effectiveGenerationWindow)}.`;
 		},
 
 		get isModalOpen() {
@@ -635,12 +1061,34 @@ function upkeepViewModel() {
 			return this.editor.mode === 'create' ? 'New Template' : 'Edit Template';
 		},
 
-		get checklistDraftTrimmed() {
-			return String(this.editor.draftChecklistItem || '').trim();
+		get editorTitleTrimmed() {
+			return String(this.editor.template.title || '').trim();
 		},
 
-		get showChecklistEmptyNote() {
-			return this.editor.template.items.length === 0 && !this.checklistDraftTrimmed;
+		get effectiveGenerationWindow() {
+			if (this.editor.windowMode === 'auto') {
+				return suggestGenerationWindowDays(this.editor.template.recurrence);
+			}
+
+			return clampWholeNumber(this.editor.template.generationWindowDays, 0, 365, suggestGenerationWindowDays(this.editor.template.recurrence));
+		},
+
+		get ruleEditorEffectiveStartDate() {
+			let normalized = normalizeRule(this.editor.ruleEditor.draft);
+			if (!normalized) {
+				return todayIsoDate();
+			}
+
+			if (normalized.interval <= 1) {
+				return todayIsoDate();
+			}
+
+			let referenceDate = this.editor.ruleEditor.referenceDate || this.editor.template.createdAt || todayIsoDate();
+			return suggestRuleStartDate(normalized, referenceDate);
+		},
+
+		get showRuleBuilder() {
+			return this.editor.ruleEditor.open;
 		}
 	};
 }

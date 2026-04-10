@@ -7,6 +7,12 @@ export const THEME_OPTIONS = Object.freeze(['auto', 'light', 'dark']);
 export const WEEKDAY_NAMES = Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
 export const MONTH_LABELS = Object.freeze(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']);
 export const ORDINAL_LABELS = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({ 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', '-1': 'last' }));
+export const DEFAULT_GENERATION_WINDOWS = Object.freeze({
+	daily: 1,
+	weekly: 2,
+	monthly: 5,
+	yearly: 14,
+});
 
 /** @typedef {'auto' | 'light' | 'dark'} ThemeMode */
 /** @typedef {'daily' | 'weekly' | 'monthly' | 'yearly'} RuleType */
@@ -34,6 +40,7 @@ export const ORDINAL_LABELS = /** @type {Readonly<Record<string, string>>} */ (O
  * @property {number} [ordinal]
  * @property {string} [weekday]
  * @property {number} [month]
+ * @property {string} [startsOn]
  */
 
 /**
@@ -54,6 +61,7 @@ export const ORDINAL_LABELS = /** @type {Readonly<Record<string, string>>} */ (O
  * @property {string} dueDate
  * @property {InstanceItem[]} items
  * @property {string | null} completedAt
+ * @property {string | null} completedOn
  */
 
 /**
@@ -117,6 +125,26 @@ function isIsoDate(value) {
  */
 function isIsoDateTime(value) {
 	return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function normalizeCompletedOn(value) {
+	return isIsoDate(value) ? String(value) : null;
+}
+
+/**
+ * @param {string | null} completedAt
+ * @returns {string | null}
+ */
+function deriveCompletedOn(completedAt) {
+	if (!completedAt || !isIsoDateTime(completedAt)) {
+		return null;
+	}
+
+	return todayIsoDate(new Date(completedAt));
 }
 
 /**
@@ -254,6 +282,10 @@ export function normalizeRule(saved) {
 		interval,
 	};
 
+	if (isIsoDate(saved.startsOn)) {
+		rule.startsOn = String(saved.startsOn);
+	}
+
 	if (type === 'daily') {
 		return rule;
 	}
@@ -319,7 +351,7 @@ function normalizeTemplate(saved) {
 		title,
 		recurrence,
 		items,
-		generationWindowDays: clampNumber(saved.generationWindowDays, 0, 365, 7),
+		generationWindowDays: clampNumber(saved.generationWindowDays, 0, 365, suggestGenerationWindowDays(recurrence)),
 		createdAt,
 		updatedAt: isIsoDate(saved.updatedAt) ? saved.updatedAt : createdAt,
 	};
@@ -345,12 +377,15 @@ function normalizeInstance(saved) {
 		completedAt = saved.resolvedAt;
 	}
 
+	let completedOn = normalizeCompletedOn(saved.completedOn) || deriveCompletedOn(completedAt);
+
 	return {
 		id: String(saved.id || createId('inst')),
 		templateId: String(saved.templateId || ''),
 		dueDate: saved.dueDate,
 		items,
 		completedAt,
+		completedOn,
 	};
 }
 
@@ -433,7 +468,7 @@ function normalizeEditableTemplateInput(value) {
 		title,
 		recurrence,
 		items,
-		generationWindowDays: clampNumber(value.generationWindowDays, 0, 365, 7),
+		generationWindowDays: clampNumber(value.generationWindowDays, 0, 365, suggestGenerationWindowDays(recurrence)),
 		createdAt,
 		updatedAt: isIsoDate(value.updatedAt) ? value.updatedAt : createdAt,
 	};
@@ -457,15 +492,22 @@ export function createDefaultRule(previousRule = null) {
 		let nextRule = normalizeRule(deepCopy(previousRule));
 		if (nextRule) {
 			nextRule.id = createId('rule');
+			if (nextRule.interval > 1 && !isIsoDate(nextRule.startsOn)) {
+				nextRule.startsOn = suggestRuleStartDate(nextRule);
+			}
+			if (nextRule.interval <= 1 && nextRule.startsOn) {
+				delete nextRule.startsOn;
+			}
 			return nextRule;
 		}
 	}
 
-	return /** @type {RecurrenceRule} */ (normalizeRule({
+	let rule = /** @type {RecurrenceRule} */ (normalizeRule({
 		type: 'weekly',
 		interval: 1,
 		day: 'Monday',
 	}));
+	return rule;
 }
 
 /**
@@ -477,8 +519,56 @@ export function createDefaultTemplateDraft() {
 		title: '',
 		recurrence: [createDefaultRule()],
 		items: [],
-		generationWindowDays: 7,
+		generationWindowDays: DEFAULT_GENERATION_WINDOWS.weekly,
 	};
+}
+
+/**
+ * @param {RecurrenceRule['type']} type
+ * @returns {number}
+ */
+function defaultGenerationWindowForType(type) {
+	return DEFAULT_GENERATION_WINDOWS[type] || DEFAULT_GENERATION_WINDOWS.weekly;
+}
+
+/**
+ * @param {RecurrenceRule[]} recurrence
+ * @returns {number}
+ */
+export function suggestGenerationWindowDays(recurrence) {
+	if (!Array.isArray(recurrence) || recurrence.length === 0) {
+		return DEFAULT_GENERATION_WINDOWS.weekly;
+	}
+
+	return recurrence.reduce((largest, rule) => {
+		return Math.max(largest, defaultGenerationWindowForType(rule.type));
+	}, 0);
+}
+
+/**
+ * @param {number | string | undefined} value
+ * @returns {string}
+ */
+function formatOrdinalDay(value) {
+	let day = Number(value);
+	let absoluteDay = Math.abs(day);
+	let lastTwoDigits = absoluteDay % 100;
+	if (lastTwoDigits >= 11 && lastTwoDigits <= 13) {
+		return `${day}th`;
+	}
+
+	let suffix = 'th';
+	if (absoluteDay % 10 === 1) {
+		suffix = 'st';
+	}
+	else if (absoluteDay % 10 === 2) {
+		suffix = 'nd';
+	}
+	else if (absoluteDay % 10 === 3) {
+		suffix = 'rd';
+	}
+
+	return `${day}${suffix}`;
 }
 
 /**
@@ -499,10 +589,83 @@ export function createRecurrenceDescription(rule) {
 		if (rule.mode === 'weekday_position') {
 			return `${everyLabel} ${rule.interval === 1 ? 'month' : 'months'} on the ${ORDINAL_LABELS[String(rule.ordinal)]} ${rule.weekday}`;
 		}
-		return `${everyLabel} ${rule.interval === 1 ? 'month' : 'months'} on day ${rule.day}`;
+		return `${everyLabel} ${rule.interval === 1 ? 'month' : 'months'} on the ${formatOrdinalDay(rule.day)}`;
 	}
 
 	return `${everyLabel} ${rule.interval === 1 ? 'year' : 'years'} on ${MONTH_LABELS[(rule.month || 1) - 1]} ${rule.day}`;
+}
+
+/**
+ * @param {RecurrenceRule} rule
+ * @param {string} [referenceDate]
+ * @returns {string}
+ */
+export function suggestRuleStartDate(rule, referenceDate = todayIsoDate()) {
+	let safeReferenceDate = isIsoDate(referenceDate) ? referenceDate : todayIsoDate();
+	let referenceDayNumber = isoDateToDayNumber(safeReferenceDate);
+
+	if (rule.type === 'daily') {
+		return safeReferenceDate;
+	}
+
+	if (rule.type === 'weekly') {
+		let weekdayName = WEEKDAY_NAMES.includes(String(rule.day)) ? String(rule.day) : 'Monday';
+		for (let dayNumber = referenceDayNumber; dayNumber < referenceDayNumber + 7; dayNumber += 1) {
+			let candidate = dayNumberToIsoDate(dayNumber);
+			if (weekdayNameFromIsoDate(candidate) === weekdayName) {
+				return candidate;
+			}
+		}
+		return safeReferenceDate;
+	}
+
+	if (rule.type === 'monthly') {
+		let start = isoDateToDate(safeReferenceDate);
+		for (let monthOffset = 0; monthOffset < 240; monthOffset += 1) {
+			let year = start.getFullYear() + Math.floor((start.getMonth() + monthOffset) / 12);
+			let monthIndex = (start.getMonth() + monthOffset) % 12;
+			let day = null;
+
+			if (rule.mode === 'weekday_position') {
+				day = nthWeekdayOfMonth(year, monthIndex, rule.weekday || 'Monday', rule.ordinal || 1);
+			}
+			else {
+				day = Math.min(typeof rule.day === 'number' ? rule.day : 1, daysInMonth(year, monthIndex));
+			}
+
+			if (day === null) {
+				continue;
+			}
+
+			let candidate = dayNumberToIsoDate(Math.floor(Date.UTC(year, monthIndex, day) / 86400000));
+			if (isoDateToDayNumber(candidate) >= referenceDayNumber) {
+				return candidate;
+			}
+		}
+		return safeReferenceDate;
+	}
+
+	let start = isoDateToDate(safeReferenceDate);
+	for (let yearOffset = 0; yearOffset < 400; yearOffset += 1) {
+		let year = start.getFullYear() + yearOffset;
+		let month = clampNumber(rule.month, 1, 12, 1) - 1;
+		let day = Math.min(typeof rule.day === 'number' ? rule.day : 1, daysInMonth(year, month));
+		let candidate = dayNumberToIsoDate(Math.floor(Date.UTC(year, month, day) / 86400000));
+		if (isoDateToDayNumber(candidate) >= referenceDayNumber) {
+			return candidate;
+		}
+	}
+
+	return safeReferenceDate;
+}
+
+/**
+ * @param {RecurrenceRule} rule
+ * @param {string} fallbackDate
+ * @returns {string}
+ */
+function ruleStartsOn(rule, fallbackDate) {
+	return isIsoDate(rule.startsOn) ? rule.startsOn : fallbackDate;
 }
 
 /**
@@ -602,7 +765,8 @@ function nthWeekdayOfMonth(year, monthIndex, weekdayName, ordinal) {
  */
 function matchesRule(template, rule, dueDate) {
 	let dueDayNumber = isoDateToDayNumber(dueDate);
-	let anchorDayNumber = isoDateToDayNumber(template.createdAt);
+	let anchorDate = ruleStartsOn(rule, template.createdAt);
+	let anchorDayNumber = isoDateToDayNumber(anchorDate);
 	if (dueDayNumber < anchorDayNumber) {
 		return false;
 	}
@@ -622,7 +786,7 @@ function matchesRule(template, rule, dueDate) {
 	}
 
 	if (rule.type === 'monthly') {
-		let diff = monthDifference(template.createdAt, dueDate);
+		let diff = monthDifference(anchorDate, dueDate);
 		if (diff < 0 || diff % rule.interval !== 0) {
 			return false;
 		}
@@ -640,7 +804,7 @@ function matchesRule(template, rule, dueDate) {
 		return day === Math.min(dayOfMonth, daysInMonth(year, monthIndex));
 	}
 
-	let yearDiff = yearDifference(template.createdAt, dueDate);
+	let yearDiff = yearDifference(anchorDate, dueDate);
 	if (yearDiff < 0 || yearDiff % rule.interval !== 0) {
 		return false;
 	}
@@ -678,6 +842,7 @@ function buildInstance(template, dueDate) {
 			state: 0,
 		})),
 		completedAt: null,
+		completedOn: null,
 	};
 }
 
@@ -707,7 +872,12 @@ export function isExpiredResolvedInstance(instance, todayNumber) {
 		return false;
 	}
 
-	let resolvedDayNumber = Math.floor(Date.parse(instance.completedAt) / 86400000);
+	let completedOn = normalizeCompletedOn(instance.completedOn) || deriveCompletedOn(instance.completedAt);
+	if (!completedOn) {
+		return false;
+	}
+
+	let resolvedDayNumber = isoDateToDayNumber(completedOn);
 	return todayNumber - resolvedDayNumber >= RESOLVED_RETENTION_DAYS;
 }
 
@@ -1106,8 +1276,10 @@ function clearFutureInstancesForTemplate(data, templateId, todayNumber) {
  * @returns {Instance}
  */
 function resolveInstance(instance) {
-	let timestamp = new Date().toISOString();
+	let now = new Date();
+	let timestamp = now.toISOString();
 	instance.completedAt = timestamp;
+	instance.completedOn = todayIsoDate(now);
 	instance.items = instance.items.map(item => ({
 		...item,
 		state: item.state === 0 ? 1 : item.state,
@@ -1121,6 +1293,7 @@ function resolveInstance(instance) {
  */
 function reopenInstance(instance) {
 	instance.completedAt = null;
+	instance.completedOn = null;
 	return instance;
 }
 

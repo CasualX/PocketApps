@@ -1,15 +1,15 @@
 const CACHE_PREFIX = 'upkeep';
-const CACHE_NAME = `${CACHE_PREFIX}-v20260410mvvm1`;
+const CACHE_NAME = `${CACHE_PREFIX}-v20260411fix1`;
 const APP_ASSETS = [
 	'./',
 	'./app.js',
 	'./index.css',
 	'./index.html',
 	'./index.js',
-	'./manifest.webmanifest?v=20260409pwa1',
-	'./icon.svg?v=20260409pwa1',
-	'./icon-192.png?v=20260409pwa1',
-	'./icon-512.png?v=20260409pwa1',
+	'./manifest.webmanifest?v=20260411pwa2',
+	'./icon.svg?v=20260411pwa2',
+	'./icon-192.png?v=20260411pwa2',
+	'./icon-512.png?v=20260411pwa2',
 	'../alpine.min.js'
 ];
 

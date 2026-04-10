@@ -4,8 +4,11 @@
 import {
 	VERSION,
 	createApp,
+	createRecurrenceDescription,
 	isoDateToDayNumber,
 	normalizeAppState,
+	suggestGenerationWindowDays,
+	suggestRuleStartDate,
 } from './app.js';
 
 /**
@@ -248,6 +251,50 @@ function testTemplateCrudUsesModelMethodsAndClearsFutureGeneratedCopiesOnEdit() 
 	assertEqual(model.instances.length, 0, 'deleteTemplate should remove generated instances');
 }
 
+function testMonthlyDayOfMonthDescriptionsUseOrdinalDayLabels() {
+	assertEqual(
+		createRecurrenceDescription({ id: 'rule_monthly_7', type: 'monthly', interval: 1, mode: 'day_of_month', day: 7 }),
+		'Every month on the 7th',
+		'monthly day-of-month descriptions should use ordinal day labels'
+	);
+	assertEqual(
+		createRecurrenceDescription({ id: 'rule_monthly_21', type: 'monthly', interval: 2, mode: 'day_of_month', day: 21 }),
+		'Every 2 months on the 21st',
+		'ordinal suffixes should stay correct for other day values'
+	);
+}
+
+function testSuggestedRuleStartDateAlignsTheFirstDueDateForLongerCadences() {
+	assertEqual(
+		suggestRuleStartDate({ id: 'rule_weekly', type: 'weekly', interval: 2, day: 'Monday' }, '2026-04-10'),
+		'2026-04-13',
+		'biweekly weekly rules should align to the next matching weekday'
+	);
+
+	assertEqual(
+		suggestRuleStartDate({ id: 'rule_monthly', type: 'monthly', interval: 5, mode: 'day_of_month', day: 22 }, '2026-04-25'),
+		'2026-05-22',
+		'monthly rules should align to the next matching calendar day'
+	);
+}
+
+function testSuggestedGenerationWindowMatchesTheLongestRuleCadence() {
+	assertEqual(
+		suggestGenerationWindowDays([{ id: 'rule_daily', type: 'daily', interval: 1 }]),
+		1,
+		'daily rules should surface shortly before they are due'
+	);
+
+	assertEqual(
+		suggestGenerationWindowDays([
+			{ id: 'rule_daily', type: 'daily', interval: 1 },
+			{ id: 'rule_yearly', type: 'yearly', interval: 1, month: 5, day: 2 }
+		]),
+		14,
+		'mixed cadence templates should use the widest suggested look-ahead'
+	);
+}
+
 function testChecklistAndSingleActionResolutionStayInsideTheModel() {
 	let model = createApp({
 		templates: [
@@ -295,15 +342,62 @@ function testChecklistAndSingleActionResolutionStayInsideTheModel() {
 	assertEqual(model.instances[0].completedAt, null, 'partial completion should not resolve the instance');
 	assertEqual(model.toggleInstanceItem('inst_checklist', 'item_b'), true, 'toggling the final item should succeed');
 	assert(Boolean(model.instances[0].completedAt), 'completing every checklist item should resolve the instance');
+	assertEqual(typeof model.instances[0].completedOn, 'string', 'resolving a checklist instance should stamp the local completion date');
 	assert(model.instances[0].items.every(item => item.state === 1), 'resolving a checklist instance should mark every item complete');
+
+	model.syncGeneratedInstances({ todayNumber: day('2026-04-10') });
+	assert(Boolean(model.instances[0].completedAt), 'resolved checklist instances should stay resolved after sync');
+	assert(model.instances[0].items.every(item => item.state === 1), 'sync should preserve completed checklist item state');
 
 	assertEqual(model.toggleInstanceItem('inst_checklist', 'item_a'), true, 'resolved checklist items should still be toggleable');
 	assertEqual(model.instances[0].completedAt, null, 'unchecking a completed item should reopen the instance');
+	assertEqual(model.instances[0].completedOn, null, 'reopening a checklist instance should clear the local completion date');
 
 	assertEqual(model.toggleSingleActionInstance('inst_single'), true, 'single action tasks should resolve through the model');
 	assert(Boolean(model.instances[1].completedAt), 'single action resolution should stamp completion');
+	assertEqual(typeof model.instances[1].completedOn, 'string', 'single action resolution should stamp the local completion date');
 	assertEqual(model.toggleSingleActionInstance('inst_single'), true, 'single action tasks should reopen through the same model method');
 	assertEqual(model.instances[1].completedAt, null, 'reopening a single action task should clear completion');
+	assertEqual(model.instances[1].completedOn, null, 'reopening a single action task should clear the local completion date');
+}
+
+function testResolvedInstancesUseLocalCompletionDateForRetention() {
+	let model = createApp({
+		templates: [
+			{
+				id: 'tpl_daily',
+				title: 'Daily',
+				createdAt: '2026-04-01',
+				updatedAt: '2026-04-01',
+				recurrence: [{ id: 'rule_daily', type: 'daily', interval: 1 }],
+				items: [{ id: 'item_a', label: 'A' }],
+				generationWindowDays: 7,
+			},
+		],
+		instances: [
+			{
+				id: 'inst_done',
+				templateId: 'tpl_daily',
+				dueDate: '2026-04-11',
+				items: [{ id: 'item_a', label: 'A', state: 1 }],
+				completedAt: '2026-04-10T15:30:00.000Z',
+				completedOn: '2026-04-11',
+			},
+		],
+	});
+
+	model.syncGeneratedInstances({ todayNumber: day('2026-04-11') });
+	let completed = model.instances.filter(instance => Boolean(instance.completedAt));
+	let active = model.instances.filter(instance => !instance.completedAt && instance.dueDate <= '2026-04-11');
+	assertEqual(completed.length, 1, `resolved tasks should remain visible through the local completion day\n${describeInstances(model)}`);
+	assertEqual(active.length, 0, `sync should not regenerate a fresh unresolved copy on the same local completion day\n${describeInstances(model)}`);
+
+	model.syncGeneratedInstances({ todayNumber: day('2026-04-12') });
+	completed = model.instances.filter(instance => Boolean(instance.completedAt));
+	active = model.instances.filter(instance => !instance.completedAt && instance.dueDate <= '2026-04-12');
+	assertEqual(completed.length, 0, `resolved tasks should expire the day after their local completion day\n${describeInstances(model)}`);
+	assertEqual(active.length, 1, `a new daily instance should appear the next day after the resolved copy expires\n${describeInstances(model)}`);
+	assertEqual(active[0].dueDate, '2026-04-12', `the regenerated daily instance should use the next due date\n${describeInstances(model)}`);
 }
 
 /**
@@ -338,5 +432,9 @@ runTests([
 	testWeeklyCatchUpCreatesOnlyTheLatestMissedOverdueInstance,
 	testSameDayCompletedInstanceStaysButExpiresTheNextDay,
 	testTemplateCrudUsesModelMethodsAndClearsFutureGeneratedCopiesOnEdit,
+	testMonthlyDayOfMonthDescriptionsUseOrdinalDayLabels,
+	testSuggestedRuleStartDateAlignsTheFirstDueDateForLongerCadences,
+	testSuggestedGenerationWindowMatchesTheLongestRuleCadence,
 	testChecklistAndSingleActionResolutionStayInsideTheModel,
+	testResolvedInstancesUseLocalCompletionDateForRetention,
 ]);
