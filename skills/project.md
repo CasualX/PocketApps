@@ -13,6 +13,7 @@ Use this when working anywhere in this repo.
 ## App Layout
 
 - `docs/<NAME>/`: app assets and source files.
+- `docs/<NAME>/icons/`: app icon assets.
 - `docs/<NAME>/index.html`: app entrypoint.
 - `docs/<NAME>/index.css`: app styles.
 - `docs/<NAME>/index.js`: app bootstrap code.

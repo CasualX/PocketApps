@@ -1,15 +1,17 @@
 const CACHE_PREFIX = 'feather-weight';
-const CACHE_NAME = `${CACHE_PREFIX}-v20260410mvvm2`;
+const CACHE_NAME = `${CACHE_PREFIX}-v20260411pwa1`;
 const APP_ASSETS = [
 	'./',
 	'./app.js',
 	'./index.css',
 	'./index.html',
 	'./index.js',
-	'./manifest.webmanifest?v=20260409pwa1',
-	'./icon.svg?v=20260409pwa1',
-	'./icon-192.png?v=20260409pwa1',
-	'./icon-512.png?v=20260409pwa1',
+	'./manifest.webmanifest?v=20260411pwa2',
+	'./icons/icon.svg?v=20260411pwa1',
+	'./icons/icon-192.png?v=20260411pwa1',
+	'./icons/icon-512.png?v=20260411pwa1',
+	'./icons/icon-maskable-512.png?v=20260411pwa1',
+	'./icons/icon-monochrome-512.png?v=20260411pwa1',
 	'../alpine.min.js',
 ];
 
