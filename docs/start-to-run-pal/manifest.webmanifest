@@ -1,0 +1,12 @@
+{
+	"id": "/PocketApps/start-to-run-pal/",
+	"name": "Start to Run Pal",
+	"short_name": "Run Pal",
+	"description": "Create and tweak simple start-to-run presets with editable run and walk intervals.",
+	"orientation": "portrait-primary",
+	"start_url": "./",
+	"scope": "./",
+	"display": "standalone",
+	"background_color": "#000000",
+	"theme_color": "#000000"
+}

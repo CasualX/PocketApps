@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+	<meta name="theme-color" content="#f4ecdf">
+	<title>Start to Run Pal</title>
+	<link rel="manifest" href="./manifest.webmanifest?v=20260412pwa3">
+	<link rel="stylesheet" href="./index.css">
+	<script type="module" src="./index.js"></script>
+	<script defer src="../alpine.min.js"></script>
+</head>
+	<body x-data="startToRunPalViewModel()" x-init="init()" x-on:keydown.escape.window="closeRunner(); closeTrainingEditor(); closeSettings()" x-cloak>
+	<div class="app-shell">
+		<header>
+			<div class="header-row">
+				<div class="header-side">
+					<button class="back-button" type="button" x-show="hasSelectedPreset()" x-on:click="goToPresetList()">Back</button>
+				</div>
+				<div class="header-title">
+					<h1 x-text="hasSelectedPreset() ? selectedPresetName() : 'Start to Run Pal'"></h1>
+					<p x-text="hasSelectedPreset() ? '' : 'Choose a training set'"></p>
+				</div>
+				<div class="header-side right">
+					<button class="icon-button" type="button" x-on:click="openSettings()" aria-label="Open settings">
+						<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M12 2.8 L13.2 2.8 L13.7 5.1 A7 7 0 0 1 15.9 6 L17.9 4.8 L19.2 6.1 L18 8.1 A7 7 0 0 1 18.9 10.3 L21.2 10.8 L21.2 12.2 L18.9 12.7 A7 7 0 0 1 18 14.9 L19.2 16.9 L17.9 18.2 L15.9 17 A7 7 0 0 1 13.7 17.9 L13.2 20.2 L10.8 20.2 L10.3 17.9 A7 7 0 0 1 8.1 17 L6.1 18.2 L4.8 16.9 L6 14.9 A7 7 0 0 1 5.1 12.7 L2.8 12.2 L2.8 10.8 L5.1 10.3 A7 7 0 0 1 6 8.1 L4.8 6.1 L6.1 4.8 L8.1 6 A7 7 0 0 1 10.3 5.1 L10.8 2.8 Z"></path>
+							<circle cx="12" cy="12" r="3.2"></circle>
+						</svg>
+					</button>
+				</div>
+			</div>
+		</header>
+
+		<main class="app-scroll">
+			<section class="preset-list" x-show="!hasSelectedPreset()" aria-label="Training sets">
+				<template x-for="preset in presetEntries()" :key="preset.key">
+					<button class="preset-row" type="button" x-on:click="selectPreset(preset.key)">
+						<div class="preset-copy">
+							<h2 x-text="preset.title"></h2>
+							<p x-text="presetSummary(preset.key)"></p>
+						</div>
+						<span class="preset-chevron" aria-hidden="true">›</span>
+					</button>
+				</template>
+			</section>
+
+			<section class="preset-detail" x-show="hasSelectedPreset()" aria-label="Training set details">
+				<div class="preset-toolbar">
+					<div>
+						<div class="eyebrow">Current set</div>
+						<div class="preset-summary-line" x-text="presetSummary(selectedPresetKey)"></div>
+					</div>
+					<button class="primary-button" type="button" x-show="canEditSelectedPreset()" x-on:click="addTraining()">Add training</button>
+				</div>
+
+				<template x-if="selectedPresetTrainings().length === 0">
+					<div class="empty-panel">No trainings yet in this set.</div>
+				</template>
+
+				<div class="training-list">
+					<template x-for="(training, trainingIndex) in selectedPresetTrainings()" :key="selectedPresetName() + '-' + trainingIndex + '-' + training.name">
+						<article class="training-card">
+							<div class="training-overview">
+								<h2 class="training-name" x-text="training.name"></h2>
+								<div class="training-duration" x-text="trainingDurationLabel(training)"></div>
+							</div>
+
+							<div class="interval-strip" role="list" :aria-label="'Intervals for ' + training.name" x-init="bindIntervalStripMask($el)">
+								<div class="interval-track">
+									<template x-for="(interval, intervalIndex) in training.intervals" :key="selectedPresetName() + '-overview-' + trainingIndex + '-' + intervalIndex">
+										<div class="interval-chip" role="listitem" :style="intervalStyle(interval, intervalIndex)">
+											<span class="interval-chip-name" x-text="interval.name"></span>
+											<span class="interval-chip-duration" x-text="intervalDurationLabel(interval)"></span>
+										</div>
+									</template>
+								</div>
+							</div>
+
+							<div class="training-actions-row">
+								<button class="card-action-button" type="button" x-show="canEditSelectedPreset()" x-on:click="openTrainingEditor(trainingIndex)">EDIT</button>
+								<button class="card-action-button start" type="button" :disabled="!canStartTraining(training)" x-on:click="startTraining(training)">▸ START</button>
+							</div>
+						</article>
+					</template>
+				</div>
+			</section>
+		</main>
+
+		<div class="runner-overlay" :class="{ open: isRunnerOpen() }" :style="runnerThemeStyle()" :aria-hidden="String(!isRunnerOpen())">
+			<div class="runner-panel-inner">
+				<div class="runner-header">
+					<button class="sheet-action runner-exit" type="button" x-on:click="closeRunner()">Exit</button>
+					<div class="runner-header-copy">
+						<div class="runner-header-title" x-text="runnerHeaderTitle()"></div>
+						<div class="runner-header-detail" x-text="runnerHeaderDetail()"></div>
+					</div>
+					<div class="runner-header-spacer"></div>
+				</div>
+
+				<template x-if="activeRunnerTraining()">
+					<div class="runner-body">
+						<div class="runner-stage">
+							<div class="runner-status" x-text="runnerStatusLabel()"></div>
+							<h2 class="runner-interval-name" x-text="activeRunnerFrame()?.completed ? 'Done' : activeRunnerInterval()?.name"></h2>
+							<div class="runner-timer" x-text="runnerRemainingDisplay()"></div>
+							<div class="runner-support-row">
+								<div class="runner-stat">
+									<span class="runner-stat-label">Interval</span>
+									<span class="runner-stat-value" x-text="runnerIntervalDurationDisplay()"></span>
+								</div>
+								<div class="runner-stat">
+									<span class="runner-stat-label">Left total</span>
+									<span class="runner-stat-value" x-text="runnerTotalRemainingDisplay()"></span>
+								</div>
+							</div>
+							<p class="runner-next-line" x-text="runnerNextLabel()"></p>
+						</div>
+
+						<div class="runner-controls">
+							<button class="runner-control-button secondary" type="button" x-on:click="previousRunnerInterval()" aria-label="Previous interval">
+								<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M18 6 9 12l9 6"></path>
+									<path d="M6 6v12"></path>
+								</svg>
+							</button>
+							<button class="runner-control-button primary" type="button" x-on:click="toggleRunnerPlayback()" aria-label="Play or pause interval timer">
+								<span class="runner-control-label" x-text="runnerPlayButtonLabel()"></span>
+							</button>
+							<button class="runner-control-button secondary" type="button" x-on:click="nextRunnerInterval()" aria-label="Next interval">
+								<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+									<path d="m6 6 9 6-9 6"></path>
+									<path d="M18 6v12"></path>
+								</svg>
+							</button>
+						</div>
+
+						<div class="runner-volume">
+							<div class="runner-volume-title">Volume</div>
+							<div class="segmented runner-volume-segment" role="group" aria-label="Set runner volume" :style="runnerVolumeSegmentStyle()">
+								<template x-for="option in runnerVolumeOptions" :key="option.key">
+									<button type="button" :class="{ active: runner.volumeKey === option.key }" x-on:click="setRunnerVolume(option.key)" x-text="option.label"></button>
+								</template>
+							</div>
+						</div>
+					</div>
+				</template>
+			</div>
+		</div>
+
+		<div class="editor-overlay" :class="{ open: isTrainingEditorOpen() }" :aria-hidden="String(!isTrainingEditorOpen())">
+			<div class="overlay-panel-inner">
+				<div class="settings-header">
+					<button class="sheet-action" type="button" x-on:click="closeTrainingEditor()">Close</button>
+					<div class="settings-title" x-text="trainingEditorTitle()"></div>
+					<button class="sheet-action save-sheet-action" type="button" x-on:click="saveTrainingEditor()" :disabled="!canSaveTrainingEditor()">Save</button>
+				</div>
+
+				<template x-if="activeTraining()">
+					<div class="editor-sheet-body">
+						<label class="field-block">
+							<span class="field-label">Training name</span>
+							<input class="field-input" type="text" :value="activeTraining().name" :readonly="!canEditSelectedPreset()" x-on:input="setTrainingName(activeTrainingIndex(), $event.target.value)" placeholder="Enter training name">
+						</label>
+
+						<div class="field-block">
+							<span class="field-label">Intervals</span>
+							<div class="interval-editor-list">
+								<template x-for="(interval, intervalIndex) in activeTraining().intervals" :key="selectedPresetName() + '-editor-' + activeTrainingIndex() + '-' + intervalIndex">
+									<div class="interval-editor-card" :style="intervalEditorStyle(interval)">
+										<label class="interval-editor-field interval-editor-name">
+											<span class="interval-mini-label">Name:</span>
+											<input class="interval-name-input" type="text" :value="interval.name" :readonly="!canEditSelectedPreset()" x-on:input="setIntervalName(activeTrainingIndex(), intervalIndex, $event.target.value)">
+										</label>
+
+										<div class="interval-editor-field time-group" aria-label="Interval time">
+											<span class="interval-mini-label">Time:</span>
+											<div class="time-inline-inputs">
+												<input class="time-part-input minutes" type="text" inputmode="numeric" maxlength="2" :value="timePartValue(interval, intervalIndex, 'minutes')" :readonly="!canEditSelectedPreset()" x-on:focus="startTimePartEdit(interval, intervalIndex, 'minutes', $event)" x-on:input="changeTimePartDraft(intervalIndex, 'minutes', $event.target.value)" x-on:blur="finishTimePartEdit(interval, intervalIndex, 'minutes')" x-on:keydown.enter.prevent="$event.target.blur()" x-on:keydown.escape.prevent="cancelTimePartEdit(intervalIndex, 'minutes'); $event.target.blur()" aria-label="Minutes">
+												<span class="time-separator">:</span>
+												<input class="time-part-input seconds" type="text" inputmode="numeric" maxlength="2" :value="timePartValue(interval, intervalIndex, 'seconds')" :readonly="!canEditSelectedPreset()" x-on:focus="startTimePartEdit(interval, intervalIndex, 'seconds', $event)" x-on:input="changeTimePartDraft(intervalIndex, 'seconds', $event.target.value)" x-on:blur="finishTimePartEdit(interval, intervalIndex, 'seconds')" x-on:keydown.enter.prevent="$event.target.blur()" x-on:keydown.escape.prevent="cancelTimePartEdit(intervalIndex, 'seconds'); $event.target.blur()" aria-label="Seconds">
+											</div>
+										</div>
+
+										<div class="interval-editor-field color-group">
+											<span class="interval-mini-label">Color:</span>
+											<label class="color-picker-button" :style="'--picker-color:' + interval.color" aria-label="Pick interval color">
+												<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+													<path d="M14.5 4.5 19.5 9.5"></path>
+													<path d="M12.2 6.8 5.2 13.8a2.8 2.8 0 0 0-.8 1.7l-.5 3.5 3.5-.5a2.8 2.8 0 0 0 1.7-.8l7-7"></path>
+													<path d="M14.5 4.5a2.6 2.6 0 1 1 3.7 3.7"></path>
+												</svg>
+												<input class="color-input-overlay" type="color" :value="interval.color" :disabled="!canEditSelectedPreset()" x-on:input="setIntervalColor(activeTrainingIndex(), intervalIndex, $event.target.value)" aria-label="Pick interval color">
+											</label>
+										</div>
+
+										<div class="interval-row-actions">
+											<button class="icon-action-button" type="button" x-show="canEditSelectedPreset()" x-on:click="duplicateInterval(activeTrainingIndex(), intervalIndex)" aria-label="Duplicate interval">
+												<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+													<rect x="9" y="9" width="10" height="10" rx="2"></rect>
+													<path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+												</svg>
+											</button>
+											<button class="icon-action-button danger" type="button" x-show="canEditSelectedPreset()" x-on:click="removeInterval(activeTrainingIndex(), intervalIndex)" aria-label="Delete interval">
+												<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+													<path d="M4 7h16"></path>
+													<path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"></path>
+													<path d="M7.5 7 8.2 18a2 2 0 0 0 2 1.9h3.6a2 2 0 0 0 2-1.9L16.5 7"></path>
+													<path d="M10 11v5"></path>
+													<path d="M14 11v5"></path>
+												</svg>
+											</button>
+										</div>
+										</div>
+									</div>
+								</template>
+								<button class="secondary-button interval-add-button" type="button" x-show="canEditSelectedPreset()" x-on:click="addInterval(activeTrainingIndex())">Add interval</button>
+							</div>
+						</div>
+
+						<div class="editor-actions" x-show="!trainingEditor.isNew && canEditSelectedPreset()">
+							<button class="danger-button action-button" type="button" x-on:click="removeTraining(activeTrainingIndex())">Remove training</button>
+						</div>
+					</div>
+				</template>
+			</div>
+		</div>
+
+		<div class="settings-overlay" :class="{ open: settingsOpen }" :aria-hidden="String(!settingsOpen)">
+			<div class="overlay-panel-inner">
+				<div class="settings-header">
+					<button class="sheet-action" type="button" x-on:click="closeSettings()">Close</button>
+					<div class="settings-title">Settings</div>
+					<div class="settings-header-spacer"></div>
+				</div>
+
+				<div class="settings-copy">Appearance and data tools for this device.</div>
+
+				<div class="settings-list">
+					<div class="settings-card">
+						<div class="settings-action-main">
+							<div class="settings-action-title">Theme</div>
+							<div class="settings-action-subtitle">Select the preferred color theme.</div>
+						</div>
+						<div class="segmented compact" role="group" aria-label="Choose theme" :style="themeSegmentStyle()">
+							<template x-for="theme in themeOptions" :key="theme">
+								<button type="button" :class="{ active: model.themeMode === theme }" x-on:click="setTheme(theme)" x-text="themeLabel(theme)"></button>
+							</template>
+						</div>
+					</div>
+
+					<button class="settings-action-btn import" type="button" x-on:click="triggerImport()">
+						<div class="settings-action-main">
+							<div class="settings-action-title">Import data</div>
+							<div class="settings-action-subtitle">Upload a backup and replace the current trainings and settings on this device.</div>
+						</div>
+						<div class="settings-action-icon">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>
+								<path d="M12 3v11"></path>
+								<path d="M8 10l4 4 4-4"></path>
+							</svg>
+						</div>
+					</button>
+
+					<button class="settings-action-btn export" type="button" x-on:click="exportData()">
+						<div class="settings-action-main">
+							<div class="settings-action-title">Export data</div>
+							<div class="settings-action-subtitle">Download a JSON backup of the current trainings and preferences.</div>
+						</div>
+						<div class="settings-action-icon">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>
+								<path d="M12 15V4"></path>
+								<path d="M8 8l4-4 4 4"></path>
+							</svg>
+						</div>
+					</button>
+
+					<button class="settings-action-btn wipe" type="button" x-on:click="confirmWipeData()">
+						<div class="settings-action-main">
+							<div class="settings-action-title">Wipe data</div>
+							<div class="settings-action-subtitle">Clear all saved trainings and leave the app empty after confirmation.</div>
+						</div>
+						<div class="settings-action-icon">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M18 6 6 18M6 6l12 12"></path>
+							</svg>
+						</div>
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<input
+			type="file"
+			accept=".json"
+			x-ref="importFile"
+			x-on:change="handleImport($event)"
+			style="display:none"
+		>
+
+		<div class="sheet-toast" x-cloak x-show="isTrainingEditorOpen() && trainingEditorErrorMessage" x-transition.opacity.duration.160ms role="status" aria-live="polite" x-text="trainingEditorErrorMessage"></div>
+	</div>
+</body>
+</html>
