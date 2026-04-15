@@ -1,3 +1,8 @@
+---
+name: project
+description: "Use when a task needs repo-wide context such as app layout under docs/, static-site constraints, test commands, JavaScript type-checking conventions, or PWA/service-worker expectations."
+---
+
 # Pocket Apps Project Guide
 
 Use this when working anywhere in this repo.

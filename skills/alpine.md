@@ -1,3 +1,8 @@
+---
+name: alpine
+description: "Use when working with Alpine.js directives, Alpine component markup, x-data patterns, bindings, event handlers, stores, or Alpine-specific browser behavior in this repo."
+---
+
 Your new, lightweight, JavaScript framework.
 
 

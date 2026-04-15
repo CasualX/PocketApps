@@ -1,3 +1,8 @@
+---
+name: mvvm
+description: "Use when structuring or refactoring Alpine app logic around model/viewmodel boundaries, persisted state ownership, business logic placement, watchers, or testable domain logic."
+---
+
 # Alpine MVVM Style
 
 Use this guidance when building new Alpine apps in this repo.
