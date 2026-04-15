@@ -73,7 +73,7 @@
 						<div class="task-list">
 							<template x-for="instance in group.items" :key="instance.id">
 								<article class="task-card compact" :class="taskCardClasses(instance)">
-									<button class="task-toggle" type="button" x-on:click="toggleTaskOpen(instance.id)" :aria-expanded="isTaskOpen(instance.id) ? 'true' : 'false'">
+									<button class="task-toggle" type="button" x-on:click="toggleTaskOpen(instance.id)" :aria-expanded="String(isTaskOpen(instance.id))">
 										<div class="task-toggle-main">
 											<div class="task-title-row compact">
 												<h3 x-text="templateForInstance(instance).title"></h3>
@@ -82,7 +82,7 @@
 										</div>
 										<span class="task-chevron" :class="{ open: isTaskOpen(instance.id) }" aria-hidden="true">⌄</span>
 									</button>
-									<div class="task-expand-shell" :class="{ open: isTaskOpen(instance.id) }" :style="expandShellStyle(isTaskOpen(instance.id), $refs.expandInner)" :aria-hidden="isTaskOpen(instance.id) ? 'false' : 'true'">
+									<div class="task-expand-shell" :class="{ open: isTaskOpen(instance.id) }" :style="expandShellStyle(isTaskOpen(instance.id), $refs.expandInner)" :aria-hidden="String(!isTaskOpen(instance.id))">
 										<div class="task-expand" x-ref="expandInner">
 											<div class="task-summary" x-text="templateRuleSummary(templateForInstance(instance))"></div>
 											<ul class="checklist" x-show="hasChecklist(instance)">
@@ -152,7 +152,7 @@
 			</div>
 		</div>
 
-		<div class="settings-overlay" :class="{ open: settingsOpen }" :aria-hidden="settingsOpen ? 'false' : 'true'">
+		<div class="settings-overlay" :class="{ open: settingsOpen }" :aria-hidden="String(!settingsOpen)">
 			<div class="overlay-panel-inner">
 			<div class="settings-header">
 				<button class="sheet-action" type="button" x-on:click="closeSettings()">Close</button>
@@ -218,7 +218,7 @@
 			</div>
 		</div>
 
-		<div class="editor-overlay" :class="{ open: editor.open }" :aria-hidden="editor.open ? 'false' : 'true'">
+		<div class="editor-overlay" :class="{ open: editor.open }" :aria-hidden="String(!editor.open)">
 			<template x-if="editor.open">
 			<form class="editor-form overlay-panel-inner" x-on:submit.prevent="saveTemplate()">
 				<div class="settings-header">
@@ -329,7 +329,7 @@
 							</div>
 
 							<div class="rule-builder-step advanced-shell">
-								<div class="disclosure-heading" x-on:click="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen" :aria-expanded="editor.ruleEditor.advancedOpen ? 'true' : 'false'" role="button" tabindex="0" x-on:keydown.enter.prevent="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen" x-on:keydown.space.prevent="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen">
+								<div class="disclosure-heading" x-on:click="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen" :aria-expanded="String(editor.ruleEditor.advancedOpen)" role="button" tabindex="0" x-on:keydown.enter.prevent="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen" x-on:keydown.space.prevent="editor.ruleEditor.advancedOpen = !editor.ruleEditor.advancedOpen">
 									<span class="field-label">Repeat details</span>
 									<span class="disclosure-chevron" :class="{ open: editor.ruleEditor.advancedOpen }" aria-hidden="true">⌄</span>
 								</div>

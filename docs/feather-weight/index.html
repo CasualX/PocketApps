@@ -203,12 +203,12 @@
 										class="history-week-toggle"
 										type="button"
 										@click="toggleHistoryExpansion(period.periodStart)"
-										:aria-expanded="expandedHistory[period.periodStart] ? 'true' : 'false'"
+										:aria-expanded="String(expandedHistory[period.periodStart])"
 										:aria-label="historyToggleAriaLabel(period)"
 									>⌄</button>
 								</div>
 
-								<div class="history-week-detail" :aria-hidden="expandedHistory[period.periodStart] ? 'false' : 'true'">
+								<div class="history-week-detail" :aria-hidden="String(!expandedHistory[period.periodStart])">
 									<div class="history-week-detail-inner">
 										<ul class="history-list">
 											<template x-for="entry in period.entries" :key="entry.date">
