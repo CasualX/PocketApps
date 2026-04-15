@@ -830,6 +830,66 @@ header {
 	background: transparent;
 }
 
+.runner-support {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	align-items: stretch;
+}
+
+.runner-support-note {
+	margin: 0 auto;
+	width: 100%;
+	max-width: 420px;
+	padding: 12px 14px;
+	border: 1px solid var(--runner-border);
+	border-radius: 18px;
+	background: color-mix(in srgb, var(--runner-text) 12%, transparent);
+	color: var(--runner-text);
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.5;
+	text-align: center;
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	text-wrap: balance;
+}
+
+.runner-support-note.subtle {
+	background: color-mix(in srgb, var(--runner-text) 8%, transparent);
+	color: var(--runner-text-soft);
+	font-weight: 500;
+}
+
+.runner-support-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 10px;
+}
+
+.runner-support-button {
+	flex: 1 1 160px;
+	max-width: 220px;
+	min-height: 52px;
+	padding: 0 18px;
+	border: 1px solid var(--runner-border);
+	border-radius: 18px;
+	background: color-mix(in srgb, var(--runner-text) 10%, transparent);
+	color: var(--runner-text);
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	transition: transform var(--anim-fast) ease, background var(--anim-fast) ease, opacity var(--anim-fast) ease;
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+}
+
+.runner-support-button:active {
+	transform: scale(0.98);
+}
+
 .editor-overlay.open,
 .settings-overlay.open {
 	transform: translateY(0);

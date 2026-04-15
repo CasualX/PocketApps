@@ -120,6 +120,44 @@ function vibrateIfSupported(pattern) {
 	return navigator.vibrate(pattern);
 }
 
+function runnerAudioNoticeForState(state) {
+	if (state === 'interrupted') {
+		return 'This device paused sound after the runner lost focus. Tap Enable sound, then press Play.';
+	}
+
+	if (state === 'suspended') {
+		return 'Sound needs a tap on this device. Tap Enable sound, then press Play.';
+	}
+
+	if (state === 'closed') {
+		return 'Sound stopped on this device. Tap Enable sound, then press Play.';
+	}
+
+	return 'Sound is unavailable right now. Tap Enable sound, then press Play.';
+}
+
+function runnerAudioNoticeForError(error) {
+	let name = typeof error?.name === 'string' ? error.name : '';
+	if (name === 'NotAllowedError') {
+		return 'Sound needs a tap on this device. Tap Enable sound, then press Play.';
+	}
+
+	if (name === 'NotSupportedError') {
+		return 'This browser cannot play runner cues.';
+	}
+
+	return 'Sound could not start on this device. Tap Enable sound, then press Play.';
+}
+
+function runnerWakeLockNoticeForError(error) {
+	let name = typeof error?.name === 'string' ? error.name : '';
+	if (name === 'NotAllowedError') {
+		return 'Keep the screen awake manually on this device.';
+	}
+
+	return 'This device could not keep the screen awake.';
+}
+
 function syncIntervalStripMask(element) {
 	if (!(element instanceof HTMLElement)) {
 		return;
@@ -247,10 +285,13 @@ function createViewModel() {
 	let removeSystemThemeWatcher = null;
 	let runnerTickTimeout = 0;
 	let runnerAudioContext = null;
+	let runnerAudioReadyPromise = null;
 	let runnerMasterGain = null;
 	let runnerVisibilityHandler = null;
 	let runnerLastCountdownSecond = null;
 	let runnerLastSpokenKey = '';
+	let runnerWakeLock = null;
+	let runnerWakeLockRequestPromise = null;
 
 	return {
 		model: storage.load(),
@@ -278,6 +319,8 @@ function createViewModel() {
 		},
 		trainingEditorErrorMessage: '',
 		trainingEditorErrorTimeout: 0,
+		runnerAudioNotice: '',
+		runnerWakeLockNotice: '',
 
 		init() {
 			applyTheme(this.model.themeMode);
@@ -287,14 +330,20 @@ function createViewModel() {
 				}
 			});
 			runnerVisibilityHandler = () => {
-				if (document.visibilityState !== 'visible' || !this.isRunnerOpen()) {
+				if (!this.isRunnerOpen()) {
+					return;
+				}
+
+				if (document.visibilityState !== 'visible') {
+					this.releaseRunnerWakeLock();
 					return;
 				}
 
 				this.syncRunnerFrame(performance.now(), { silent: true });
+				void this.ensureRunnerAudioReady();
+				void this.requestRunnerWakeLock();
 			};
 			document.addEventListener('visibilitychange', runnerVisibilityHandler);
-			registerServiceWorker();
 		},
 
 		persist() {
@@ -395,6 +444,112 @@ function createViewModel() {
 			return buildRunnerThemeStyle(this.activeRunnerInterval()?.color);
 		},
 
+		clearRunnerAudioNotice() {
+			this.runnerAudioNotice = '';
+		},
+
+		setRunnerAudioNotice(message) {
+			this.runnerAudioNotice = this.runner.volumeKey === 'off' ? '' : String(message || '');
+		},
+
+		clearRunnerWakeLockNotice() {
+			this.runnerWakeLockNotice = '';
+		},
+
+		configureRunnerAudioSession() {
+			if (!navigator.audioSession || typeof navigator.audioSession !== 'object') {
+				return;
+			}
+
+			try {
+				navigator.audioSession.type = this.isRunnerOpen() && this.runner.volumeKey !== 'off' ? 'playback' : 'auto';
+			}
+			catch {
+				// Audio session hints are best-effort only.
+			}
+		},
+
+		runnerAudioActionLabel() {
+			return this.runnerAudioNotice ? 'Enable sound' : 'Test sound';
+		},
+
+		runnerCanRetryWakeLock() {
+			return this.isRunnerOpen()
+				&& document.visibilityState === 'visible'
+				&& 'wakeLock' in navigator
+				&& (!runnerWakeLock || runnerWakeLock.released);
+		},
+
+		async triggerRunnerAudioAction() {
+			if (this.runner.volumeKey === 'off') {
+				return;
+			}
+
+			let isReady = await this.ensureRunnerAudioReady();
+			if (!isReady) {
+				return;
+			}
+
+			this.playRunnerCue('interval');
+			vibrateIfSupported(46);
+		},
+
+		async requestRunnerWakeLock() {
+			if (runnerWakeLockRequestPromise) {
+				return runnerWakeLockRequestPromise;
+			}
+
+			runnerWakeLockRequestPromise = (async () => {
+				try {
+					if (!this.isRunnerOpen() || document.visibilityState !== 'visible') {
+						return false;
+					}
+
+					if (!('wakeLock' in navigator) || !navigator.wakeLock || typeof navigator.wakeLock.request !== 'function') {
+						this.runnerWakeLockNotice = 'Keep the screen awake manually on this device.';
+						return false;
+					}
+
+					if (runnerWakeLock && !runnerWakeLock.released) {
+						this.clearRunnerWakeLockNotice();
+						return true;
+					}
+
+					runnerWakeLock = await navigator.wakeLock.request('screen');
+					runnerWakeLock.addEventListener('release', () => {
+						runnerWakeLock = null;
+						if (!this.isRunnerOpen() || document.visibilityState !== 'visible') {
+							return;
+						}
+
+						this.runnerWakeLockNotice = 'Screen stay-awake ended. Tap Keep awake if needed.';
+					});
+					this.clearRunnerWakeLockNotice();
+					return true;
+				}
+				catch (error) {
+					this.runnerWakeLockNotice = runnerWakeLockNoticeForError(error);
+					return false;
+				}
+				finally {
+					runnerWakeLockRequestPromise = null;
+				}
+			})();
+
+			return runnerWakeLockRequestPromise;
+		},
+
+		releaseRunnerWakeLock() {
+			let activeWakeLock = runnerWakeLock;
+			runnerWakeLock = null;
+			runnerWakeLockRequestPromise = null;
+			this.clearRunnerWakeLockNotice();
+
+			if (activeWakeLock && !activeWakeLock.released) {
+				activeWakeLock.release().catch(() => {});
+			}
+		},
+
 		stopRunnerTicker() {
 			if (!runnerTickTimeout) {
 				return;
@@ -458,6 +613,10 @@ function createViewModel() {
 
 			if (!this.runner.isPlaying) {
 				this.runner.elapsedBeforePauseMs = nextFrame.elapsedMs;
+			}
+
+			if (this.runner.isPlaying && this.runner.volumeKey !== 'off' && runnerAudioContext && runnerAudioContext.state !== 'running' && document.visibilityState === 'visible') {
+				void this.ensureRunnerAudioReady();
 			}
 
 			if (this.runner.isPlaying && !options.silent) {
@@ -541,8 +700,10 @@ function createViewModel() {
 			this.runner.playbackStartedAtMs = performance.now();
 			this.runner.isPlaying = true;
 			this.syncRunnerFrame(this.runner.playbackStartedAtMs, { silent: true });
+			void this.requestRunnerWakeLock();
 			void this.ensureRunnerAudioReady().then(isReady => {
 				if (!isReady) {
+					this.pauseRunner();
 					return;
 				}
 
@@ -644,29 +805,56 @@ function createViewModel() {
 		},
 
 		async ensureRunnerAudioReady() {
-			let AudioContextClass = window.AudioContext || window.webkitAudioContext;
-			try {
-				if (AudioContextClass && !runnerAudioContext) {
-					runnerAudioContext = new AudioContextClass();
-					runnerMasterGain = runnerAudioContext.createGain();
-					runnerMasterGain.connect(runnerAudioContext.destination);
-				}
-
-				this.updateRunnerAudioVolume();
-
-				if (runnerAudioContext && runnerAudioContext.state === 'suspended') {
-					await runnerAudioContext.resume();
-				}
-
-				if ('speechSynthesis' in window) {
-					window.speechSynthesis.getVoices();
-				}
-
-				return !runnerAudioContext || runnerAudioContext.state === 'running';
+			if (runnerAudioReadyPromise) {
+				return runnerAudioReadyPromise;
 			}
-			catch {
-				return false;
-			}
+
+			runnerAudioReadyPromise = (async () => {
+				let AudioContextClass = window.AudioContext || window.webkitAudioContext;
+				let hasSpeechSynthesis = 'speechSynthesis' in window;
+				this.configureRunnerAudioSession();
+
+				try {
+					if (!AudioContextClass && !hasSpeechSynthesis) {
+						this.setRunnerAudioNotice('This browser cannot play runner cues.');
+						return false;
+					}
+
+					if (AudioContextClass && (!runnerAudioContext || runnerAudioContext.state === 'closed')) {
+						runnerAudioContext = new AudioContextClass();
+						runnerMasterGain = runnerAudioContext.createGain();
+						runnerMasterGain.connect(runnerAudioContext.destination);
+					}
+
+					this.updateRunnerAudioVolume();
+
+					if (runnerAudioContext && runnerAudioContext.state !== 'running' && runnerAudioContext.state !== 'closed') {
+						await runnerAudioContext.resume();
+					}
+
+					if (hasSpeechSynthesis) {
+						window.speechSynthesis.getVoices();
+					}
+
+					let isReady = !runnerAudioContext || runnerAudioContext.state === 'running';
+					if (!isReady) {
+						this.setRunnerAudioNotice(runnerAudioNoticeForState(runnerAudioContext?.state));
+						return false;
+					}
+
+					this.clearRunnerAudioNotice();
+					return true;
+				}
+				catch (error) {
+					this.setRunnerAudioNotice(runnerAudioNoticeForError(error));
+					return false;
+				}
+				finally {
+					runnerAudioReadyPromise = null;
+				}
+			})();
+
+			return runnerAudioReadyPromise;
 		},
 
 		updateRunnerAudioVolume() {
@@ -697,7 +885,12 @@ function createViewModel() {
 		},
 
 		playRunnerCue(kind = 'interval') {
-			if (!runnerAudioContext || !runnerMasterGain || this.runner.volumeKey === 'off' || runnerAudioContext.state !== 'running') {
+			if (!runnerAudioContext || !runnerMasterGain || this.runner.volumeKey === 'off') {
+				return;
+			}
+
+			if (runnerAudioContext.state !== 'running') {
+				this.setRunnerAudioNotice(runnerAudioNoticeForState(runnerAudioContext.state));
 				return;
 			}
 
@@ -740,10 +933,14 @@ function createViewModel() {
 			}
 
 			this.runner.volumeKey = volumeKey;
+			this.configureRunnerAudioSession();
 			this.updateRunnerAudioVolume();
 
 			if (volumeKey !== 'off') {
 				void this.ensureRunnerAudioReady();
+			}
+			else {
+				this.clearRunnerAudioNotice();
 			}
 		},
 
@@ -1111,10 +1308,14 @@ function createViewModel() {
 				completed: false,
 			};
 			this.resetRunnerAudioMarkers();
+			this.clearRunnerAudioNotice();
+			this.clearRunnerWakeLockNotice();
 			this.updateOverlayScrollLock();
 			this.syncRunnerFrame(this.runner.playbackStartedAtMs, { silent: true });
+			void this.requestRunnerWakeLock();
 			void this.ensureRunnerAudioReady().then(isReady => {
 				if (!isReady) {
+					this.pauseRunner();
 					return;
 				}
 
@@ -1136,6 +1337,7 @@ function createViewModel() {
 			}
 
 			this.stopRunnerTicker();
+			this.releaseRunnerWakeLock();
 			this.runner = {
 				...this.runner,
 				open: false,
@@ -1147,9 +1349,11 @@ function createViewModel() {
 				completed: false,
 			};
 			this.resetRunnerAudioMarkers();
+			this.clearRunnerAudioNotice();
 			if ('speechSynthesis' in window) {
 				window.speechSynthesis.cancel();
 			}
+			this.configureRunnerAudioSession();
 			this.updateOverlayScrollLock();
 		},
 
@@ -1344,6 +1548,7 @@ function createViewModel() {
 		destroy() {
 			this.stopRunnerTicker();
 			this.resetRunnerAudioMarkers();
+			this.releaseRunnerWakeLock();
 			setOverlayScrollLock(false);
 
 			if (typeof removeSystemThemeWatcher === 'function') {
@@ -1364,7 +1569,9 @@ function createViewModel() {
 				window.speechSynthesis.cancel();
 			}
 
+			this.configureRunnerAudioSession();
 			runnerAudioContext = null;
+			runnerAudioReadyPromise = null;
 			runnerMasterGain = null;
 		},
 	};

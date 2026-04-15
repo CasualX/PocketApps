@@ -143,6 +143,15 @@
 								</template>
 							</div>
 						</div>
+
+						<div class="runner-support" x-show="runner.volumeKey !== 'off' || runnerAudioNotice || runnerWakeLockNotice || runnerCanRetryWakeLock()">
+							<p class="runner-support-note" x-show="runnerAudioNotice" role="status" aria-live="polite" x-text="runnerAudioNotice"></p>
+							<p class="runner-support-note subtle" x-show="runnerWakeLockNotice" role="status" aria-live="polite" x-text="runnerWakeLockNotice"></p>
+							<div class="runner-support-actions">
+								<button class="runner-support-button" type="button" x-show="runner.volumeKey !== 'off'" x-on:click="triggerRunnerAudioAction()" x-text="runnerAudioActionLabel()"></button>
+								<button class="runner-support-button" type="button" x-show="runnerCanRetryWakeLock()" x-on:click="requestRunnerWakeLock()">Keep awake</button>
+							</div>
+						</div>
 					</div>
 				</template>
 			</div>
