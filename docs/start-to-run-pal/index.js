@@ -227,47 +227,32 @@ function createStorage() {
 	};
 }
 
-function getSystemTheme() {
-	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function resolveTheme(themeMode) {
-	return themeMode === 'auto' ? getSystemTheme() : themeMode;
-}
-
-function applyTheme(themeMode) {
-	let resolvedTheme = resolveTheme(themeMode);
-	document.documentElement.dataset.theme = resolvedTheme;
-	let metaTheme = document.querySelector('meta[name="theme-color"]');
-	if (metaTheme) {
-		metaTheme.setAttribute('content', THEME_COLORS[resolvedTheme]);
+function applyTheme(theme) {
+	let resolvedTheme = theme;
+	if (resolvedTheme === 'auto' || !THEME_OPTIONS.includes(resolvedTheme)) {
+		resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 	}
+
+	document.documentElement.dataset.theme = resolvedTheme;
+
+	let metaThemeColorEl = document.head.querySelector('meta[name="theme-color"]');
+	if (!metaThemeColorEl) {
+		metaThemeColorEl = document.createElement('meta');
+		metaThemeColorEl.setAttribute('name', 'theme-color');
+		document.head.appendChild(metaThemeColorEl);
+	}
+	metaThemeColorEl.setAttribute('content', THEME_COLORS[resolvedTheme]);
+}
+
+function watchSystemThemeChange(callback) {
+	let mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+	mediaQuery.addEventListener('change', callback);
+	return () => mediaQuery.removeEventListener('change', callback);
 }
 
 function setOverlayScrollLock(locked) {
 	document.documentElement.classList.toggle('overlay-scroll-locked', locked);
 	document.body.classList.toggle('overlay-scroll-locked', locked);
-}
-
-function watchSystemThemeChange(callback) {
-	let mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-	let handler = () => callback();
-
-	if (typeof mediaQuery.addEventListener === 'function') {
-		mediaQuery.addEventListener('change', handler);
-	}
-	else if (typeof mediaQuery.addListener === 'function') {
-		mediaQuery.addListener(handler);
-	}
-
-	return () => {
-		if (typeof mediaQuery.removeEventListener === 'function') {
-			mediaQuery.removeEventListener('change', handler);
-		}
-		else if (typeof mediaQuery.removeListener === 'function') {
-			mediaQuery.removeListener(handler);
-		}
-	};
 }
 
 function downloadJson(filename, value) {
@@ -282,7 +267,7 @@ function downloadJson(filename, value) {
 
 function createViewModel() {
 	let storage = createStorage();
-	let removeSystemThemeWatcher = null;
+	let stopThemeWatcher = null;
 	let runnerTickTimeout = 0;
 	let runnerAudioContext = null;
 	let runnerAudioReadyPromise = null;
@@ -323,12 +308,7 @@ function createViewModel() {
 		runnerWakeLockNotice: '',
 
 		init() {
-			applyTheme(this.model.themeMode);
-			removeSystemThemeWatcher = watchSystemThemeChange(() => {
-				if (this.model.themeMode === 'auto') {
-					applyTheme(this.model.themeMode);
-				}
-			});
+			this.initTheme();
 			runnerVisibilityHandler = () => {
 				if (!this.isRunnerOpen()) {
 					return;
@@ -344,6 +324,22 @@ function createViewModel() {
 				void this.requestRunnerWakeLock();
 			};
 			document.addEventListener('visibilitychange', runnerVisibilityHandler);
+		},
+
+		initTheme() {
+			if (typeof stopThemeWatcher === 'function') {
+				stopThemeWatcher();
+			}
+
+			let syncTheme = () => applyTheme(this.model.themeMode);
+			syncTheme();
+
+			this.$watch('model.themeMode', () => {
+				syncTheme();
+				this.persist();
+			});
+
+			stopThemeWatcher = watchSystemThemeChange(syncTheme);
 		},
 
 		persist() {
@@ -1079,14 +1075,14 @@ function createViewModel() {
 			this.closeTrainingEditor();
 		},
 
-		setTheme(themeMode) {
-			this.model.setThemeMode(themeMode);
+		setTheme(theme) {
+			this.model.setTheme(theme);
 			this.persist();
 			applyTheme(this.model.themeMode);
 		},
 
-		themeLabel(themeMode) {
-			return themeMode.charAt(0).toUpperCase() + themeMode.slice(1);
+		themeLabel(theme) {
+			return theme.charAt(0).toUpperCase() + theme.slice(1);
 		},
 
 		themeSegmentStyle() {
@@ -1551,9 +1547,9 @@ function createViewModel() {
 			this.releaseRunnerWakeLock();
 			setOverlayScrollLock(false);
 
-			if (typeof removeSystemThemeWatcher === 'function') {
-				removeSystemThemeWatcher();
-				removeSystemThemeWatcher = null;
+			if (typeof stopThemeWatcher === 'function') {
+				stopThemeWatcher();
+				stopThemeWatcher = null;
 			}
 
 			if (runnerVisibilityHandler) {

@@ -8,7 +8,32 @@ import {
 const STORAGE_KEY = 'todo_buy_data';
 const THEME_COLORS = Object.freeze({ light: '#f4efe6', dark: '#000000' });
 
+function applyTheme(theme) {
+	let resolvedTheme = theme;
+	if (resolvedTheme === 'auto' || !THEME_OPTIONS.includes(resolvedTheme)) {
+		resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+	}
+
+	document.documentElement.dataset.theme = resolvedTheme;
+
+	let metaThemeColorEl = document.head.querySelector('meta[name="theme-color"]');
+	if (!metaThemeColorEl) {
+		metaThemeColorEl = document.createElement('meta');
+		metaThemeColorEl.setAttribute('name', 'theme-color');
+		document.head.appendChild(metaThemeColorEl);
+	}
+	metaThemeColorEl.setAttribute('content', THEME_COLORS[resolvedTheme]);
+}
+
+function watchSystemThemeChange(callback) {
+	let mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+	mediaQuery.addEventListener('change', callback);
+	return () => mediaQuery.removeEventListener('change', callback);
+}
+
 function todoBuyViewModel() {
+	let stopThemeWatcher = null;
+
 	return {
 		model: createApp(),
 		draft: {
@@ -50,14 +75,23 @@ function todoBuyViewModel() {
 			this.state.mode = 'add';
 			this.state.view = 'stores';
 			this.state.activeShopStore = null;
-			this.applyTheme();
+			this.initTheme();
+		},
+
+		initTheme() {
+			if (typeof stopThemeWatcher === 'function') {
+				stopThemeWatcher();
+			}
+
+			let syncTheme = () => applyTheme(this.model.themeMode);
+			syncTheme();
+
 			this.$watch('model.themeMode', () => {
-				this.applyTheme();
+				syncTheme();
 				this.persist();
 			});
-			window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-				this.applyTheme();
-			});
+
+			stopThemeWatcher = watchSystemThemeChange(syncTheme);
 		},
 
 		restore() {
@@ -80,23 +114,6 @@ function todoBuyViewModel() {
 
 		persist() {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(this.model.toJSON()));
-		},
-
-		applyTheme() {
-			let resolvedTheme = this.model.themeMode;
-			if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') {
-				resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-			}
-
-			document.documentElement.setAttribute('data-theme', resolvedTheme);
-
-			let themeColorMeta = document.querySelector('head > meta[name="theme-color"]');
-			if (!(themeColorMeta instanceof HTMLMetaElement)) {
-				themeColorMeta = document.createElement('meta');
-				themeColorMeta.setAttribute('name', 'theme-color');
-				document.head.appendChild(themeColorMeta);
-			}
-			themeColorMeta.setAttribute('content', THEME_COLORS[resolvedTheme]);
 		},
 
 		handleEscape() {
@@ -636,7 +653,7 @@ function todoBuyViewModel() {
 				this.model = createApp(importedData);
 				this.persist();
 				this.resetDraftAfterDataChange();
-				this.applyTheme();
+				applyTheme(this.model.themeMode);
 				this.closeOverlay();
 				this.closeSettings();
 				alert('App data imported.');
@@ -675,7 +692,7 @@ function todoBuyViewModel() {
 			this.persist();
 			this.resetDraftAfterDataChange();
 			this.state.mode = 'add';
-			this.applyTheme();
+			applyTheme(this.model.themeMode);
 			this.closeOverlay();
 			this.closeSettings();
 			alert('Saved data wiped.');
@@ -956,12 +973,8 @@ function todoBuyViewModel() {
 			};
 		},
 
-		setThemeMode(theme) {
+		setTheme(theme) {
 			this.model.setTheme(theme);
-		},
-
-		isThemeActive(theme) {
-			return this.model.themeMode === theme;
 		}
 	};
 }

@@ -12,7 +12,7 @@ const DEFAULT_INTERVAL_COLORS = Object.freeze([
 	'#5f9a9a',
 ]);
 
-/** @typedef {'auto' | 'light' | 'dark'} ThemeMode */
+/** @typedef {'auto' | 'light' | 'dark'} Theme */
 
 /**
  * @typedef Interval
@@ -37,7 +37,7 @@ const DEFAULT_INTERVAL_COLORS = Object.freeze([
 /**
  * @typedef AppState
  * @property {string} version
- * @property {ThemeMode} themeMode
+ * @property {Theme} themeMode
  * @property {Training[]} trainings
  */
 
@@ -60,9 +60,9 @@ function isPresent(value) {
 
 /**
  * @param {unknown} value
- * @returns {value is ThemeMode}
+ * @returns {value is Theme}
  */
-function isThemeMode(value) {
+function isTheme(value) {
 	return typeof value === 'string' && THEME_OPTIONS.includes(value);
 }
 
@@ -323,7 +323,7 @@ export function normalizeAppState(saved) {
 
 	return {
 		version: VERSION,
-		themeMode: isThemeMode(saved.themeMode) ? saved.themeMode : 'auto',
+		themeMode: isTheme(saved.themeMode) ? saved.themeMode : 'auto',
 		trainings: normalizeTrainings(saved.trainings),
 	};
 }
@@ -452,15 +452,15 @@ export function createApp(savedState = null) {
 		},
 
 		/**
-		 * @param {ThemeMode} themeMode
+		 * @param {Theme} theme
 		 * @returns {void}
 		 */
-		setThemeMode(themeMode) {
-			if (!isThemeMode(themeMode)) {
+		setTheme(theme) {
+			if (!isTheme(theme)) {
 				return;
 			}
 
-			this.themeMode = themeMode;
+			this.themeMode = theme;
 		},
 
 		/**

@@ -23,7 +23,32 @@ const WHOLE_KG_VALUES = Object.freeze(Array.from({ length: 101 }, (_, index) => 
 const WHOLE_LBS_VALUES = Object.freeze(Array.from({ length: 223 }, (_, index) => index + 44));
 const DECIMALS = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
+function applyTheme(theme) {
+	let resolvedTheme = theme;
+	if (resolvedTheme === 'auto' || !THEME_OPTIONS.includes(resolvedTheme)) {
+		resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+	}
+
+	document.documentElement.dataset.theme = resolvedTheme;
+
+	let metaThemeColorEl = document.head.querySelector('meta[name="theme-color"]');
+	if (!metaThemeColorEl) {
+		metaThemeColorEl = document.createElement('meta');
+		metaThemeColorEl.setAttribute('name', 'theme-color');
+		document.head.appendChild(metaThemeColorEl);
+	}
+	metaThemeColorEl.setAttribute('content', THEME_COLORS[resolvedTheme]);
+}
+
+function watchSystemThemeChange(callback) {
+	let mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+	mediaQuery.addEventListener('change', callback);
+	return () => mediaQuery.removeEventListener('change', callback);
+}
+
 function featherWeightViewModel() {
+	let stopThemeWatcher = null;
+
 	return {
 		model: createApp(),
 		storageLocked: false,
@@ -89,11 +114,7 @@ function featherWeightViewModel() {
 			else {
 				this.restore();
 			}
-			this.applyTheme();
-			this.$watch('model.themeMode', () => {
-				this.applyTheme();
-				this.persist();
-			});
+			this.initTheme();
 			this.$watch('model.unit', () => {
 				this.refreshChartRender();
 				this.persist();
@@ -106,7 +127,6 @@ function featherWeightViewModel() {
 					this.updateChartFade();
 				});
 			});
-			window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
 			window.addEventListener('resize', () => {
 				this.viewportWidth = window.innerWidth;
 				this.refreshChartRender();
@@ -119,6 +139,22 @@ function featherWeightViewModel() {
 				this.scrollChartToEnd();
 				this.updateChartFade();
 			});
+		},
+
+		initTheme() {
+			if (typeof stopThemeWatcher === 'function') {
+				stopThemeWatcher();
+			}
+
+			let syncTheme = () => applyTheme(this.model.themeMode);
+			syncTheme();
+
+			this.$watch('model.themeMode', () => {
+				syncTheme();
+				this.persist();
+			});
+
+			stopThemeWatcher = watchSystemThemeChange(syncTheme);
 		},
 
 		restore() {
@@ -145,30 +181,6 @@ function featherWeightViewModel() {
 				return;
 			}
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(this.model.toJSON()));
-		},
-
-		applyTheme() {
-			let resolvedTheme = this.model.themeMode;
-			if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') {
-				resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-			}
-
-			document.documentElement.setAttribute('data-theme', resolvedTheme);
-
-			let themeColorMeta = document.querySelector('head > meta[name="theme-color"]');
-			if (!themeColorMeta) {
-				themeColorMeta = document.createElement('meta');
-				themeColorMeta.setAttribute('name', 'theme-color');
-				document.head.appendChild(themeColorMeta);
-			}
-			themeColorMeta.setAttribute('content', THEME_COLORS[resolvedTheme]);
-		},
-
-		resolvedTheme() {
-			if (this.model.themeMode === 'light' || this.model.themeMode === 'dark') {
-				return this.model.themeMode;
-			}
-			return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 		},
 
 		switchUnit(nextUnit) {
@@ -303,7 +315,7 @@ function featherWeightViewModel() {
 			};
 		},
 
-		setThemeMode(theme) {
+		setTheme(theme) {
 			this.model.setTheme(theme);
 		},
 
@@ -892,7 +904,7 @@ function featherWeightViewModel() {
 			this.model = createApp(imported);
 			this.storageLocked = false;
 			this.resetHistoryView();
-			this.applyTheme();
+			applyTheme(this.model.themeMode);
 			this.refreshChartRender();
 			this.persist();
 		},
@@ -948,7 +960,7 @@ function featherWeightViewModel() {
 			this.overlayOpen = false;
 			this.removingIds = {};
 			this.resetHistoryView();
-			this.applyTheme();
+			applyTheme(this.model.themeMode);
 			this.refreshChartRender();
 			this.persist();
 		},

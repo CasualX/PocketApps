@@ -294,7 +294,7 @@
 				</div>
 				<div class="segmented compact" role="group" aria-label="Choose theme" :style="themeSegmentStyle()">
 					<template x-for="theme in themeOptions" :key="'theme-' + theme">
-						<button type="button" :class="{ active: isThemeActive(theme) }" x-on:click="setThemeMode(theme)" x-text="theme"></button>
+						<button type="button" :class="{ active: model.themeMode === theme }" x-on:click="setTheme(theme)" x-text="theme"></button>
 					</template>
 				</div>
 			</div>

@@ -14,7 +14,7 @@ export const DEFAULT_GENERATION_WINDOWS = Object.freeze({
 	yearly: 14,
 });
 
-/** @typedef {'auto' | 'light' | 'dark'} ThemeMode */
+/** @typedef {'auto' | 'light' | 'dark'} Theme */
 /** @typedef {'daily' | 'weekly' | 'monthly' | 'yearly'} RuleType */
 
 /**
@@ -68,7 +68,7 @@ export const DEFAULT_GENERATION_WINDOWS = Object.freeze({
  * @typedef AppState
  * @property {string} version
  * @property {string | undefined} lastOpenedDate
- * @property {ThemeMode} themeMode
+ * @property {Theme} themeMode
  * @property {Template[]} templates
  * @property {Instance[]} instances
  */
@@ -105,9 +105,9 @@ export function defaultAppState() {
 
 /**
  * @param {unknown} value
- * @returns {value is ThemeMode}
+ * @returns {value is Theme}
  */
-function isThemeMode(value) {
+function isTheme(value) {
 	return typeof value === 'string' && THEME_OPTIONS.includes(value);
 }
 
@@ -397,7 +397,7 @@ export function normalizeAppState(saved) {
 	let state = defaultAppState();
 	let source = isPlainObject(saved) ? saved : {};
 	let lastOpenedDate = isIsoDate(source.lastOpenedDate) ? source.lastOpenedDate : state.lastOpenedDate;
-	let themeMode = isThemeMode(source.themeMode) ? source.themeMode : state.themeMode;
+	let themeMode = isTheme(source.themeMode) ? source.themeMode : state.themeMode;
 	let templates = /** @type {Template[]} */ (Array.isArray(source.templates) ? source.templates.map(normalizeTemplate).filter(isPresent) : []);
 	let templateIds = new Set(templates.map(template => template.id));
 	let normalizedInstances = /** @type {Instance[]} */ (Array.isArray(source.instances)
@@ -1317,9 +1317,9 @@ export function createApp(savedState = null) {
 			return buildModelSnapshot(this);
 		},
 
-		/** @param {ThemeMode | string} theme */
+		/** @param {Theme | string} theme */
 		setTheme(theme) {
-			this.themeMode = isThemeMode(theme) ? theme : 'auto';
+			this.themeMode = isTheme(theme) ? theme : 'auto';
 			return this.themeMode;
 		},
 
