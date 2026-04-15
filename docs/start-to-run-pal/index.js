@@ -16,7 +16,6 @@ import {
 } from './app.js';
 
 const STORAGE_KEY = 'start-to-run-pal-data';
-const SW_URL = './sw.js?v=20260412pwa6';
 const THEME_COLORS = Object.freeze({ light: '#f4ecdf', dark: '#18201d' });
 const observedIntervalStrips = new WeakSet();
 const USER_TRAININGS_PRESET_KEY = 'my-trainings';
@@ -241,19 +240,6 @@ function downloadJson(filename, value) {
 	link.download = filename;
 	link.click();
 	URL.revokeObjectURL(url);
-}
-
-async function registerServiceWorker() {
-	if (!('serviceWorker' in navigator)) {
-		return;
-	}
-
-	try {
-		await navigator.serviceWorker.register(SW_URL, { scope: './' });
-	}
-	catch {
-		// Registration failure should not block the app shell.
-	}
 }
 
 function createViewModel() {

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'start-to-run-pal';
-const CACHE_NAME = `${CACHE_PREFIX}-v20260412pwa7`;
+const CACHE_NAME = `${CACHE_PREFIX}-v20260415pwa8`;
 const APP_ASSETS = [
 	'./',
 	'./app.js',

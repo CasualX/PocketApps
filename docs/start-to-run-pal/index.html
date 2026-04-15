@@ -302,5 +302,14 @@
 
 		<div class="sheet-toast" x-cloak x-show="isTrainingEditorOpen() && trainingEditorErrorMessage" x-transition.opacity.duration.160ms role="status" aria-live="polite" x-text="trainingEditorErrorMessage"></div>
 	</div>
+	<script>
+	if ('serviceWorker' in navigator) {
+		window.addEventListener('load', () => {
+			navigator.serviceWorker.register('./sw.js?v=20260415pwa8', { scope: './' }).catch(error => {
+				console.error('Service worker registration failed:', error);
+			});
+		});
+	}
+	</script>
 </body>
 </html>
