@@ -4,7 +4,12 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 	<title>Start to Run Pal</title>
-	<link rel="manifest" href="./manifest.webmanifest?v=20260412pwa3">
+	<link rel="manifest" href="./manifest.webmanifest?v=20260415pwa9">
+	<link rel="icon" type="image/svg+xml" href="./icons/icon.svg?v=20260415pwa9">
+	<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=20260415pwa9">
+	<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=20260415pwa9">
+	<link rel="shortcut icon" href="./icons/icon-192.png?v=20260415pwa9">
+	<link rel="apple-touch-icon" href="./icons/icon-192.png?v=20260415pwa9">
 	<link rel="stylesheet" href="./index.css">
 	<script type="module" src="./index.js"></script>
 	<script defer src="../alpine.min.js"></script>
@@ -313,7 +318,7 @@
 	<script>
 	if ('serviceWorker' in navigator) {
 		window.addEventListener('load', () => {
-			navigator.serviceWorker.register('./sw.js?v=20260415pwa8', { scope: './' }).catch(error => {
+			navigator.serviceWorker.register('./sw.js?v=20260415pwa9', { scope: './' }).catch(error => {
 				console.error('Service worker registration failed:', error);
 			});
 		});

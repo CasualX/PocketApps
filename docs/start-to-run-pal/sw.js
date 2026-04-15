@@ -1,17 +1,17 @@
 const CACHE_PREFIX = 'start-to-run-pal';
-const CACHE_NAME = `${CACHE_PREFIX}-v20260415pwa8`;
+const CACHE_NAME = `${CACHE_PREFIX}-v20260415pwa9`;
 const APP_ASSETS = [
 	'./',
 	'./app.js',
-	'./icons/icon.svg?v=20260412pwa1',
-	'./icons/icon-192.png?v=20260412pwa1',
-	'./icons/icon-512.png?v=20260412pwa1',
-	'./icons/icon-maskable-512.png?v=20260412pwa1',
-	'./icons/icon-monochrome-512.png?v=20260412pwa1',
+	'./icons/icon.svg?v=20260415pwa9',
+	'./icons/icon-192.png?v=20260415pwa9',
+	'./icons/icon-512.png?v=20260415pwa9',
+	'./icons/icon-maskable-512.png?v=20260415pwa9',
+	'./icons/icon-monochrome-512.png?v=20260415pwa9',
 	'./index.css',
 	'./index.html',
 	'./index.js',
-	'./manifest.webmanifest?v=20260412pwa3',
+	'./manifest.webmanifest?v=20260415pwa9',
 	'../alpine.min.js',
 ];
 
