@@ -270,7 +270,7 @@ export const SPORTIVA_0_TO_5K_PRESET = {
 		createSportivaTraining('Week 2 - Monday', [1, 1, 2, 2, 2, 2, 3, 3, 3, 3]),
 		createSportivaTraining('Week 2 - Wednesday', [2, 2, 3, 3, 3, 3, 3, 3]),
 		createSportivaTraining('Week 2 - Friday', [1, 1, 2, 2, 3, 3, 3, 3, 3, 3]),
-		createSportivaTraining('Week 3 - Monday', [1, 1, 2, 2, 3, 3, 3, 3, 3, 2]),
+		createSportivaTraining('Week 3 - Monday', [1, 1, 2, 2, 3, 3, 3, 3, 3, 3]),
 		createSportivaTraining('Week 3 - Wednesday', [2, 2, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1]),
 		createSportivaTraining('Week 3 - Friday', [1, 1, 2, 2, 4, 3, 4, 3, 5, 1]),
 		createSportivaTraining('Week 4 - Monday', [1, 1, 2, 2, 3, 3, 3, 3, 3, 2]),
