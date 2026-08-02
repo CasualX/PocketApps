@@ -1,5 +1,6 @@
 const CACHE_PREFIX = 'upkeep';
-const CACHE_NAME = `${CACHE_PREFIX}-v20260411pwa1`;
+const CACHE_NAME = `${CACHE_PREFIX}-v20260802offline1`;
+const APP_SHELL_URL = new URL('./index.html', self.registration.scope).href;
 const APP_ASSETS = [
 	'./',
 	'./app.js',
@@ -17,9 +18,10 @@ const APP_ASSETS = [
 
 self.addEventListener('install', event => {
 	event.waitUntil(
-		caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS))
+		caches.open(CACHE_NAME)
+			.then(cache => cache.addAll(APP_ASSETS))
+			.then(() => self.skipWaiting())
 	);
-	self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
@@ -37,7 +39,9 @@ self.addEventListener('fetch', event => {
 
 	if (event.request.mode === 'navigate') {
 		event.respondWith(
-			fetch(event.request).catch(() => caches.open(CACHE_NAME).then(cache => cache.match('./index.html')))
+			caches.open(CACHE_NAME).then(cache =>
+				cache.match(APP_SHELL_URL).then(cachedShell => cachedShell || fetch(event.request))
+			)
 		);
 		return;
 	}
