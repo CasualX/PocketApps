@@ -2,6 +2,8 @@
 
 export const VERSION = '1.0';
 export const THEME_OPTIONS = Object.freeze(['auto', 'light', 'dark']);
+export const SHARE_FORMAT = 'todo-buy-shopping-list';
+export const SHARE_VERSION = 1;
 
 /** @typedef {'auto' | 'light' | 'dark'} Theme */
 
@@ -55,6 +57,15 @@ function isFiniteNumber(value) {
  */
 function normalizeName(value) {
 	return typeof value === 'string' ? value.trim() : '';
+}
+
+/** @param {unknown} value */
+function normalizeDate(value) {
+	if (typeof value !== 'string' || !value) {
+		return null;
+	}
+	let timestamp = Date.parse(value);
+	return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
 /**
@@ -168,6 +179,21 @@ function normalizeEntries(value) {
 	}
 
 	return normalized;
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} store
+ * @returns {Entry[]}
+ */
+function normalizeEntriesForStore(value, store) {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	return normalizeEntries(value.map((entry) => (
+		isPlainObject(entry) ? { ...entry, store } : entry
+	)));
 }
 
 /**
@@ -299,6 +325,102 @@ export function normalizeAppState(saved) {
  */
 export function isSupportedImportVersion(version) {
 	return version === VERSION;
+}
+
+/**
+ * @param {string} name
+ * @param {Entry[]} entries
+ * @param {string} [shareDate]
+ */
+export function createSharePayload(name, entries, shareDate = new Date().toISOString()) {
+	let normalizedName = normalizeName(name);
+	let normalizedDate = normalizeDate(shareDate);
+	if (!normalizedName || !normalizedDate) {
+		throw new Error('Invalid shopping list');
+	}
+
+	return {
+		format: SHARE_FORMAT,
+		version: SHARE_VERSION,
+		shopping_list: {
+			name: normalizedName,
+			share_date: normalizedDate,
+			entries: entries.map((entry) => ({
+				itemName: entry.itemName,
+				quantity: entry.quantity,
+				notes: entry.notes,
+				marked: entry.marked,
+			})),
+		},
+	};
+}
+
+/** @param {unknown} value */
+export function normalizeSharePayload(value) {
+	if (!isPlainObject(value) || value.format !== SHARE_FORMAT || value.version !== SHARE_VERSION || !isPlainObject(value.shopping_list)) {
+		throw new Error('Unsupported share link');
+	}
+
+	let name = normalizeName(value.shopping_list.name);
+	let shareDate = normalizeDate(value.shopping_list.share_date);
+	let rawEntries = value.shopping_list.entries;
+	if (!name || !shareDate || !Array.isArray(rawEntries)) {
+		throw new Error('Invalid shared shopping list');
+	}
+
+	let entries = normalizeEntriesForStore(rawEntries, name);
+	if (entries.length !== rawEntries.length) {
+		throw new Error('Invalid shared shopping list items');
+	}
+	return createSharePayload(name, dedupeEntries(entries), shareDate);
+}
+
+/** @param {Uint8Array} bytes */
+function bytesToBase64Url(bytes) {
+	let binary = '';
+	for (let byte of bytes) {
+		binary += String.fromCharCode(byte);
+	}
+	return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+}
+
+/** @param {string} value */
+function base64UrlToBytes(value) {
+	let padded = value.replaceAll('-', '+').replaceAll('_', '/');
+	padded += '='.repeat((4 - (padded.length % 4)) % 4);
+	let binary = atob(padded);
+	return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+/** @param {ReturnType<typeof createSharePayload>} payload */
+export async function encodeSharePayload(payload) {
+	let bytes = new TextEncoder().encode(JSON.stringify(normalizeSharePayload(payload)));
+	let stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+	return bytesToBase64Url(new Uint8Array(await new Response(stream).arrayBuffer()));
+}
+
+/** @param {string} token */
+export async function decodeShareToken(token) {
+	if (!token || !/^[A-Za-z0-9_-]+$/u.test(token)) {
+		throw new Error('Invalid share link');
+	}
+	let stream = new Blob([base64UrlToBytes(token)]).stream().pipeThrough(new DecompressionStream('gzip'));
+	let json = new TextDecoder().decode(await new Response(stream).arrayBuffer());
+	return normalizeSharePayload(JSON.parse(json));
+}
+
+/** @param {string} token @param {string} href */
+export function makeShareUrl(token, href) {
+	let url = new URL(href);
+	url.hash = `?share=${token}`;
+	return url.href;
+}
+
+/** @param {string} href */
+export function shareTokenFromUrl(href) {
+	let url = new URL(href);
+	let fragment = url.hash.startsWith('#?') ? url.hash.slice(2) : url.hash.slice(1);
+	return new URLSearchParams(fragment).get('share');
 }
 
 /**
@@ -611,6 +733,33 @@ export function createApp(savedState = null) {
 				return entry.marked ? { ...entry, marked: false } : entry;
 			});
 			return removedCount;
+		},
+
+		/**
+		 * Replace one store's active shopping list without changing other stores.
+		 *
+		 * @param {string} store
+		 * @param {unknown} entries
+		 * @returns {boolean}
+		 */
+		replaceStoreEntries(store, entries) {
+			let normalizedStore = normalizeName(store);
+			if (!normalizedStore || !Array.isArray(entries)) {
+				return false;
+			}
+
+			let incomingEntries = dedupeEntries(normalizeEntriesForStore(entries, normalizedStore));
+
+			this.ensureStoreHistory(normalizedStore);
+			for (let entry of incomingEntries) {
+				this.ensureItemHistory(normalizedStore, entry.itemName);
+			}
+
+			this.entries = [
+				...incomingEntries,
+				...this.entries.filter((entry) => entry.store !== normalizedStore),
+			];
+			return true;
 		},
 
 		/**

@@ -3,10 +3,16 @@
 
 import {
 	VERSION,
-	normalizeAppState,
+	createSharePayload,
 	createApp,
+	decodeShareToken,
+	encodeSharePayload,
 	entryKey,
 	isSupportedImportVersion,
+	makeShareUrl,
+	normalizeAppState,
+	normalizeSharePayload,
+	shareTokenFromUrl,
 } from './app.js';
 
 /**
@@ -160,6 +166,59 @@ function testCompletionAndMarkedCountsWorkPerStoreOrGlobally() {
 	], 'global completion should remove all marked items');
 }
 
+function testReplaceStoreEntriesOverwritesOnlyTheSharedList() {
+	let model = createApp({
+		storeHistory: ['Grocery', 'Market'],
+		itemHistory: { Grocery: ['Old item'], Market: ['Soap'] },
+		entries: [
+			{ store: 'Grocery', itemName: 'Old item', quantity: null, notes: '', marked: false },
+			{ store: 'Market', itemName: 'Soap', quantity: 1, notes: '', marked: false },
+		],
+	});
+
+	assertEqual(model.replaceStoreEntries('Grocery', [
+		{ itemName: 'Milk', quantity: 2, notes: 'Whole', marked: true },
+		{ itemName: 'Bread', quantity: null, notes: '', marked: false },
+	]), true, 'a valid shared list should be accepted without redundant store fields');
+	assertDeepEqual(model.entries, [
+		{ store: 'Grocery', itemName: 'Milk', quantity: 2, notes: 'Whole', marked: true },
+		{ store: 'Grocery', itemName: 'Bread', quantity: null, notes: '', marked: false },
+		{ store: 'Market', itemName: 'Soap', quantity: 1, notes: '', marked: false },
+	], 'the matching list should be replaced while unrelated stores remain untouched');
+	assertDeepEqual(model.itemHistory.Grocery, ['Old item', 'Milk', 'Bread'], 'imported items should be available in history');
+}
+
+async function testShareLinkRoundTripsThroughNativeCompression() {
+	let entries = [
+		{ store: 'Grocery', itemName: 'Milk', quantity: 2, notes: 'Whole', marked: false },
+		{ store: 'Grocery', itemName: 'Bread', quantity: null, notes: '', marked: true },
+	];
+	let payload = createSharePayload('Grocery', entries, '2026-08-02T12:00:00.000Z');
+	let token = await encodeSharePayload(payload);
+	let url = makeShareUrl(token, 'https://example.test/todo-buy/index.html');
+	let decoded = await decodeShareToken(shareTokenFromUrl(url) ?? '');
+	assertDeepEqual(decoded, payload, 'the compressed shopping list should round-trip through a share URL');
+}
+
+function testSharedListDeduplicatesBeforePreviewAndImport() {
+	let payload = normalizeSharePayload({
+		format: 'todo-buy-shopping-list',
+		version: 1,
+		shopping_list: {
+			name: 'Grocery',
+			share_date: '2026-08-02T12:00:00.000Z',
+			entries: [
+				{ itemName: 'Milk', quantity: null, notes: '', marked: false },
+				{ itemName: 'Milk', quantity: 2, notes: 'Whole', marked: true },
+			],
+		},
+	});
+
+	assertDeepEqual(payload.shopping_list.entries, [
+		{ itemName: 'Milk', quantity: 2, notes: 'Whole', marked: true },
+	], 'shared items should have the same deduplicated representation in the preview and imported model');
+}
+
 function testReorderStoreEntryMovesOnlyEntriesWithinThatStore() {
 	let model = createApp({
 		storeHistory: ['Grocery', 'Market'],
@@ -197,14 +256,14 @@ function testDeleteHistoryAndImportVersionValidationStayConsistent() {
 }
 
 /**
- * @param {Array<() => void>} testFunctions
+ * @param {Array<() => void | Promise<void>>} testFunctions
  */
-function runTests(testFunctions) {
+async function runTests(testFunctions) {
 	let failures = 0;
 
 	for (let testFn of testFunctions) {
 		try {
-			testFn();
+			await testFn();
 			console.log(`PASS ${testFn.name}`);
 		}
 		catch (error) {
@@ -222,12 +281,15 @@ function runTests(testFunctions) {
 	console.log(`\n${testFunctions.length} tests passed.`);
 }
 
-runTests([
+await runTests([
 	testNormalizeAppStateKeepsOnlyCompatibleDataAndBackfillsHistories,
 	testAddOrUpdateEntryMaintainsHistoryAndReplacesExistingEntry,
 	testRenameStoreMergesEntriesAndItemHistory,
 	testRenameItemMergesDuplicateItemsWithinAStore,
 	testCompletionAndMarkedCountsWorkPerStoreOrGlobally,
+	testReplaceStoreEntriesOverwritesOnlyTheSharedList,
+	testShareLinkRoundTripsThroughNativeCompression,
+	testSharedListDeduplicatesBeforePreviewAndImport,
 	testReorderStoreEntryMovesOnlyEntriesWithinThatStore,
 	testDeleteHistoryAndImportVersionValidationStayConsistent,
 ]);

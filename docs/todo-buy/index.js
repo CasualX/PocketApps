@@ -1,8 +1,13 @@
 import {
 	THEME_OPTIONS,
+	createSharePayload,
 	createApp,
+	decodeShareToken,
+	encodeSharePayload,
 	entryKey as buildEntryKey,
 	isSupportedImportVersion as supportsImportVersion,
+	makeShareUrl,
+	shareTokenFromUrl,
 } from './app.js';
 
 const STORAGE_KEY = 'todo_buy_data';
@@ -50,6 +55,15 @@ function todoBuyViewModel() {
 		themeOptions: THEME_OPTIONS,
 		settingsOpen: false,
 		activeOverlay: null,
+		shareBusy: false,
+		shareLinkOpen: false,
+		shareLink: '',
+		shareImport: {
+			open: false,
+			status: 'loading',
+			payload: null,
+			targetStore: null,
+		},
 		storeQuery: '',
 		itemQuery: '',
 		qtyInput: '',
@@ -70,12 +84,14 @@ function todoBuyViewModel() {
 			offsetY: 0,
 		},
 
-		init() {
+		async init() {
 			this.restore();
 			this.state.mode = 'add';
 			this.state.view = 'stores';
 			this.state.activeShopStore = null;
 			this.initTheme();
+			window.addEventListener('hashchange', () => window.location.reload());
+			await this.inspectShareUrl();
 		},
 
 		initTheme() {
@@ -117,6 +133,14 @@ function todoBuyViewModel() {
 		},
 
 		handleEscape() {
+			if (this.shareImport.open) {
+				this.closeShareImport();
+				return;
+			}
+			if (this.shareLinkOpen) {
+				this.closeShareLink();
+				return;
+			}
 			if (this.settingsOpen) {
 				this.closeSettings();
 				return;
@@ -211,7 +235,7 @@ function todoBuyViewModel() {
 
 		mainActionLabel() {
 			if (this.saveFlash) {
-				return 'Saved!';
+				return this.saveFlash;
 			}
 			if (this.state.mode === 'shop') {
 				let count = this.currentCompletionCount();
@@ -294,6 +318,211 @@ function todoBuyViewModel() {
 
 		closeOverlay() {
 			this.activeOverlay = null;
+		},
+
+		removeShareTokenFromAddress() {
+			let url = new URL(window.location.href);
+			let fragment = url.hash.startsWith('#?') ? url.hash.slice(2) : url.hash.slice(1);
+			let params = new URLSearchParams(fragment);
+			params.delete('share');
+			let nextFragment = params.toString();
+			url.hash = nextFragment ? `?${nextFragment}` : '';
+			window.history.replaceState(window.history.state, '', url.href);
+		},
+
+		existingStoreForName(name) {
+			let normalizedName = String(name ?? '').trim().toLowerCase();
+			return this.model.storeHistory.find((store) => store.toLowerCase() === normalizedName);
+		},
+
+		async inspectShareUrl() {
+			let token = shareTokenFromUrl(window.location.href);
+			if (!token) {
+				return;
+			}
+
+			this.resetItemDrag();
+			this.closeOverlay();
+			this.closeSettings();
+			this.shareImport.open = true;
+			this.shareImport.status = 'loading';
+			this.shareImport.payload = null;
+			this.shareImport.targetStore = null;
+
+			try {
+				let payload = await decodeShareToken(token);
+				this.shareImport.payload = payload;
+				this.shareImport.targetStore = this.existingStoreForName(payload.shopping_list.name) ?? payload.shopping_list.name;
+				this.shareImport.status = 'ready';
+			}
+			catch (error) {
+				this.shareImport.status = 'invalid';
+			}
+		},
+
+		closeShareImport() {
+			this.shareImport.open = false;
+			this.removeShareTokenFromAddress();
+		},
+
+		shareImportTitle() {
+			if (this.shareImport.status === 'loading') {
+				return 'Opening shared list…';
+			}
+			if (this.shareImport.status === 'invalid') {
+				return 'Link not recognized';
+			}
+			return 'Shared shopping list';
+		},
+
+		shareImportMessage() {
+			if (this.shareImport.status === 'invalid') {
+				return 'The link may be damaged, incomplete, or from an unsupported version of Todo: Buy.';
+			}
+			return '';
+		},
+
+		isShareImportReady() {
+			return this.shareImport.status === 'ready' && Boolean(this.shareImport.payload);
+		},
+
+		shareImportListName() {
+			return this.shareImport.payload?.shopping_list.name ?? '';
+		},
+
+		shareImportEntries() {
+			return this.shareImport.payload?.shopping_list.entries ?? [];
+		},
+
+		shareImportCountLabel() {
+			let count = this.shareImportEntries().length;
+			return `${count} item${count === 1 ? '' : 's'}`;
+		},
+
+		shareImportDateLabel() {
+			if (!this.shareImport.payload) {
+				return '';
+			}
+			return new Intl.DateTimeFormat(undefined, {
+				dateStyle: 'medium',
+				timeStyle: 'short',
+			}).format(new Date(this.shareImport.payload.shopping_list.share_date));
+		},
+
+		shareImportAlreadyExists() {
+			let targetStore = this.shareImport.targetStore;
+			return Boolean(targetStore && this.model.hasStoreEntries(targetStore));
+		},
+
+		shareImportActionCopy() {
+			return this.shareImportAlreadyExists()
+				? 'Accepting will replace the current items in this list.'
+				: 'Accepting will add this list to your Shopping tab.';
+		},
+
+		acceptSharedList() {
+			if (!this.isShareImportReady()) {
+				return;
+			}
+
+			let payload = this.shareImport.payload;
+			let sharedList = payload.shopping_list;
+			let targetStore = this.shareImport.targetStore ?? sharedList.name;
+			if (!this.model.replaceStoreEntries(targetStore, sharedList.entries)) {
+				this.shareImport.status = 'invalid';
+				return;
+			}
+
+			this.persist();
+			this.resetDraftAfterDataChange();
+			this.state.mode = 'shop';
+			if (this.model.hasStoreEntries(targetStore)) {
+				this.state.view = 'items';
+				this.state.activeShopStore = targetStore;
+			}
+			this.closeShareImport();
+			this.flashSavedState('Shopping list imported');
+		},
+
+		async shareActiveList() {
+			let store = this.state.activeShopStore;
+			if (!store || this.shareBusy) {
+				return;
+			}
+
+			this.shareBusy = true;
+			try {
+				let shareDate = new Date().toISOString();
+				let payload = createSharePayload(store, this.model.entriesForStore(store), shareDate);
+				let token = await encodeSharePayload(payload);
+				let url = makeShareUrl(token, window.location.href);
+
+				if (typeof navigator.share === 'function') {
+					try {
+						await navigator.share({
+							title: `${store} shopping list`,
+							text: `Open this ${store} shopping list in Todo: Buy.`,
+							url,
+						});
+						return;
+					}
+					catch (error) {
+						if (error instanceof DOMException && error.name === 'AbortError') {
+							return;
+						}
+					}
+				}
+
+				if (await this.copyShareUrl(url)) {
+					this.flashSavedState('Share link copied');
+				}
+				else {
+					this.shareLink = url;
+					this.shareLinkOpen = true;
+					this.$nextTick(() => this.selectShareLink());
+				}
+			}
+			catch (error) {
+				this.flashSavedState('Could not create a share link');
+			}
+			finally {
+				this.shareBusy = false;
+			}
+		},
+
+		async copyShareUrl(url) {
+			if (typeof navigator.clipboard?.writeText !== 'function') {
+				return false;
+			}
+			try {
+				await navigator.clipboard.writeText(url);
+				return true;
+			}
+			catch (error) {
+				return false;
+			}
+		},
+
+		selectShareLink() {
+			let input = this.$refs.shareLinkInput;
+			if (input instanceof HTMLTextAreaElement) {
+				input.focus();
+				input.select();
+			}
+		},
+
+		async copyVisibleShareLink() {
+			if (await this.copyShareUrl(this.shareLink)) {
+				this.flashSavedState('Share link copied');
+				this.closeShareLink();
+				return;
+			}
+			this.selectShareLink();
+		},
+
+		closeShareLink() {
+			this.shareLinkOpen = false;
+			this.shareLink = '';
 		},
 
 		promptRenameStore(name) {
@@ -853,14 +1082,14 @@ function todoBuyViewModel() {
 			}
 
 			this.persist();
-			this.flashSavedState();
+			this.flashSavedState('Saved!');
 			this.draft.item = null;
 			this.draft.qty = null;
 			this.draft.notes = '';
 		},
 
-		flashSavedState() {
-			this.saveFlash = true;
+		flashSavedState(message) {
+			this.saveFlash = message;
 			if (this.saveFlashTimer) {
 				clearTimeout(this.saveFlashTimer);
 			}
